@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "TurnarioApp",
-    "slug": "TurnarioApp",
+    "name": "Turnario",
+    "slug": "turnario",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,20 +10,51 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#667eea"
     },
+
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.turnario",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para las videollamadas",
+        "NSMicrophoneUsageDescription": "Esta aplicación necesita acceso al micrófono para las videollamadas",
+        "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la galería para subir fotos de perfil",
+        "NSLocationWhenInUseUsageDescription": "Esta aplicación necesita acceso a la ubicación para mostrar profesionales cercanos"
+      }
     },
     "android": {
+      "package": "com.yourcompany.turnario",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#667eea"
       },
-      "edgeToEdgeEnabled": true
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#667eea"
+        }
+      ]
+    ],
+
   }
 }
