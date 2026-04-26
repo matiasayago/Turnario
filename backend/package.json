@@ -1,64 +1,117 @@
 {
   "name": "turnario-backend",
   "version": "1.0.0",
-  "description": "Backend multirubro para sistema de gestión de citas y reservas - Soporta múltiples tipos de negocios (médico, belleza, fitness, educación, consultoría, reparación, limpieza, transporte, comida, retail, etc.)",
+  "description": "Backend API para el sistema de gestión de citas y reservas Turnario",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "setup": "npm install && npm run init-db",
-    "init-db": "node scripts/init-db.js"
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --watchAll=false",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "docs:generate": "swagger-jsdoc -d swaggerDef.js -o docs/swagger.json",
+    "docs:serve": "swagger-ui-express docs/swagger.json",
+    "setup-db": "node scripts/setup-database.js",
+    "setup-db:dev": "NODE_ENV=development node scripts/setup-database.js",
+    "setup-atlas": "node scripts/setup-atlas.js",
+    "reset-db": "node scripts/setup-database.js --reset",
+    "seed": "node scripts/setup-database.js --seed-only",
+    "configure-mongodb": "node scripts/configure-mongodb.js",
+    "install-mongodb": "powershell -ExecutionPolicy Bypass -File scripts/install-mongodb-windows.ps1",
+    "install-mongodb:unix": "bash scripts/install-mongodb-unix.sh",
+    "test-connection": "node test-connection.js",
+    "test-mongodb": "node test-mongodb-config.js",
+    "test-frontend": "node test-frontend-connection.js",
+    "create-super-professional": "node scripts/create-super-professional.js"
   },
   "keywords": [
-    "turnario",
-    "citas",
-    "reservas",
-    "agenda",
-    "multirubro",
-    "negocios",
-    "servicios",
-    "profesionales",
-    "clientes",
-    "rest-api",
-    "nodejs",
+    "api",
+    "rest",
     "express",
     "mongodb",
-    "websockets",
-    "notificaciones",
-    "pagos",
-    "geolocalizacion",
-    "emails",
-    "mercadopago"
+    "mongoose",
+    "jwt",
+    "authentication",
+    "booking",
+    "appointments"
   ],
   "author": "Turnario Team",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "mongoose": "^7.5.0",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "express-validator": "^7.0.1",
-    "helmet": "^7.0.0",
-    "cors": "^2.8.5",
-    "express-rate-limit": "^6.10.0",
     "compression": "^1.7.4",
-    "morgan": "^1.10.0",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "dotenv": "^16.3.1",
-    "socket.io": "^4.7.2",
-    "nodemailer": "^6.9.4",
-    "mercadopago": "^2.0.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^6.10.0",
+    "express-validator": "^7.0.1",
     "geolib": "^3.3.4",
+    "googleapis": "^144.0.0",
     "handlebars": "^4.7.8",
-    "sharp": "^0.32.5"
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.2",
+    "mercadopago": "^2.9.0",
+    "moment": "^2.29.4",
+    "mongodb": "^4.17.2",
+    "mongoose": "^7.5.0",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.4",
+    "sharp": "^0.32.5",
+    "socket.io": "^4.8.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
+    "uuid": "^9.0.0",
+    "winston": "^3.10.0",
+    "winston-daily-rotate-file": "^4.7.1"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.4",
+    "eslint": "^8.47.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "jest": "^29.6.2",
+    "jest-environment-node": "^29.6.2",
+    "mongodb-memory-server": "^8.12.2",
     "nodemon": "^3.0.1",
-    "jest": "^29.6.2"
+    "prettier": "^3.0.2",
+    "supertest": "^6.3.3"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "eslintConfig": {
+    "extends": [
+      "eslint:recommended",
+      "prettier"
+    ],
+    "env": {
+      "node": true,
+      "es2021": true,
+      "jest": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2021,
+      "sourceType": "module"
+    },
+    "rules": {
+      "no-console": "warn",
+      "no-unused-vars": "error",
+      "prefer-const": "error"
+    }
+  },
+  "prettier": {
+    "semi": true,
+    "trailingComma": "es5",
+    "singleQuote": true,
+    "printWidth": 80,
+    "tabWidth": 2
   }
 }
-

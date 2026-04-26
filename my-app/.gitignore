@@ -30,7 +30,8 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (también ignorado desde la raíz del repo como my-app/.env)
+.env
 .env*.local
 
 # typescript

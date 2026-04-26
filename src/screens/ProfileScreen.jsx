@@ -17,7 +17,7 @@ import { TurnarioLogo } from '../components/TurnarioLogo';
 const { width } = Dimensions.get('window');
 
 export const ProfileScreen = ({ navigation }) => {
-  const { user, updateProfile, logout } = useAuth();
+  const { user, updateProfile, logout, isAuthenticated } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -29,6 +29,7 @@ export const ProfileScreen = ({ navigation }) => {
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
 
   useEffect(() => {
+    console.log('👤 ProfileScreen - isAuthenticated:', isAuthenticated, 'user:', user?.email);
     if (user) {
       setFormData({
         name: user.name || '',
@@ -38,6 +39,18 @@ export const ProfileScreen = ({ navigation }) => {
       });
     }
   }, [user]);
+
+  // Efecto para detectar cuando el usuario se desautentica y redireccionar
+  useEffect(() => {
+    if (!isAuthenticated) {
+      console.log('🚪 Usuario desautenticado, redirigiendo a login...');
+      // Forzar navegación al stack de autenticación
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Auth' }],
+      });
+    }
+  }, [isAuthenticated, navigation]);
 
   const handleSave = async () => {
     try {
@@ -65,7 +78,15 @@ export const ProfileScreen = ({ navigation }) => {
       '¿Estás seguro de que quieres cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar Sesión', style: 'destructive', onPress: logout },
+        { 
+          text: 'Cerrar Sesión', 
+          style: 'destructive', 
+          onPress: async () => {
+            console.log('🚪 Iniciando proceso de logout...');
+            await logout();
+            console.log('✅ Logout completado, el useEffect detectará el cambio y redirigirá');
+          }
+        },
       ]
     );
   };

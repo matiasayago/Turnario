@@ -1,0 +1,423 @@
+2025-09-02 00:58:14 [ERROR]: ❌ Error configurando servicio de email: nodemailer.createTransporter is not a function {"service":"turnario-backend","environment":"production"}
+TypeError: nodemailer.createTransporter is not a function
+    at EmailService.initializeTransporter (C:\Turnario\TurnarioApp\backend\services\emailService.js:18:37)
+    at new EmailService (C:\Turnario\TurnarioApp\backend\services\emailService.js:11:10)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:416:18)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+2025-09-02 01:04:47 [ERROR]: ❌ Error configurando servicio de email: nodemailer.createTransporter is not a function {"service":"turnario-backend","environment":"production"}
+TypeError: nodemailer.createTransporter is not a function
+    at EmailService.initializeTransporter (C:\Turnario\TurnarioApp\backend\services\emailService.js:18:37)
+    at new EmailService (C:\Turnario\TurnarioApp\backend\services\emailService.js:11:10)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:416:18)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+2025-09-02 01:05:52 [ERROR]: ❌ Error configurando servicio de email: nodemailer.createTransporter is not a function {"service":"turnario-backend","environment":"production"}
+TypeError: nodemailer.createTransporter is not a function
+    at EmailService.initializeTransporter (C:\Turnario\TurnarioApp\backend\services\emailService.js:18:37)
+    at new EmailService (C:\Turnario\TurnarioApp\backend\services\emailService.js:11:10)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:416:18)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+2025-09-02 01:11:51 [ERROR]: Error in register: User validation failed: phone: El teléfono es requerido {"service":"turnario-backend","environment":"production","errors":{"phone":{"name":"ValidatorError","message":"El teléfono es requerido","properties":{"message":"El teléfono es requerido","type":"required","path":"phone"},"kind":"required","path":"phone"}},"_message":"User validation failed"}
+ValidationError: User validation failed: phone: El teléfono es requerido
+    at Document.invalidate (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\document.js:3219:32)
+    at C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\document.js:3012:17
+    at C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\schematype.js:1368:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2025-09-02 01:12:21 [ERROR]: Error in getServices: Cannot populate path `professionalId` because it is not in your schema. Set the `strictPopulate` option to false to override. {"service":"turnario-backend","environment":"production","path":"professionalId"}
+StrictPopulateError: Cannot populate path `professionalId` because it is not in your schema. Set the `strictPopulate` option to false to override.
+    at getModelsMapForPopulate (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\helpers\populate\getModelsMapForPopulate.js:50:12)
+    at populate (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\model.js:4394:21)
+    at _populate (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\model.js:4354:5)
+    at C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\model.js:4326:5
+    at new Promise (<anonymous>)
+    at Function.populate (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\model.js:4325:10)
+    at model.Query._find (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\query.js:2320:20)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async model.Query.exec (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\query.js:4447:11)
+    at async Promise.all (index 0)
+2025-09-02 01:13:48 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329e23858ecsm716471a91.14 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329e23858ecsm716471a91.14 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329e23858ecsm716471a91.14 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 01:18:35 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da1879sm118753445ad.87 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da1879sm118753445ad.87 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da1879sm118753445ad.87 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 01:22:10 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7722a090c77sm11989849b3a.0 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7722a090c77sm11989849b3a.0 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7722a090c77sm11989849b3a.0 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 01:22:40 [ERROR]: ❌ Error creando usuario ana.garcia@email.com: User validation failed: password: La contraseña debe tener al menos 8 caracteres {"service":"turnario-backend","environment":"production","errors":{"password":{"name":"ValidatorError","message":"La contraseña debe tener al menos 8 caracteres","properties":{"message":"La contraseña debe tener al menos 8 caracteres","type":"minlength","minlength":8,"path":"password","value":"Ana123!"},"kind":"minlength","path":"password","value":"Ana123!"}},"_message":"User validation failed"}
+ValidationError: User validation failed: password: La contraseña debe tener al menos 8 caracteres
+    at Document.invalidate (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\document.js:3219:32)
+    at C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\document.js:3012:17
+    at C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\schematype.js:1368:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2025-09-02 01:22:41 [ERROR]: ❌ Error creando índices: An existing index has the same name as the requested index. When index names are not specified, they are auto generated and can cause conflicts. Please refer to our documentation. Requested index: { v: 2, unique: true, key: { email: 1 }, name: "email_1", sparse: true }, existing index: { v: 2, unique: true, key: { email: 1 }, name: "email_1", background: true } {"service":"turnario-backend","environment":"production","ok":0,"code":86,"codeName":"IndexKeySpecsConflict"}
+MongoServerError: An existing index has the same name as the requested index. When index names are not specified, they are auto generated and can cause conflicts. Please refer to our documentation. Requested index: { v: 2, unique: true, key: { email: 1 }, name: "email_1", sparse: true }, existing index: { v: 2, unique: true, key: { email: 1 }, name: "email_1", background: true }
+    at Connection.onMessage (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\node_modules\mongodb\lib\cmap\connection.js:202:26)
+    at MessageStream.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\node_modules\mongodb\lib\cmap\connection.js:61:60)
+    at MessageStream.emit (node:events:518:28)
+    at processIncomingData (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\node_modules\mongodb\lib\cmap\message_stream.js:124:16)
+    at MessageStream._write (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\node_modules\mongodb\lib\cmap\message_stream.js:33:9)
+    at writeOrBuffer (node:internal/streams/writable:572:12)
+    at _write (node:internal/streams/writable:501:10)
+    at Writable.write (node:internal/streams/writable:510:10)
+    at Socket.ondata (node:internal/streams/readable:1009:22)
+    at Socket.emit (node:events:518:28)
+2025-09-02 01:25:35 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-3276fce1f30sm18335666a91.23 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-3276fce1f30sm18335666a91.23 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-3276fce1f30sm18335666a91.23 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 01:45:05 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da3c38sm118898105ad.91 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da3c38sm118898105ad.91 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da3c38sm118898105ad.91 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 01:47:14 [ERROR]: Error in register: User validation failed: phone: El teléfono es requerido {"service":"turnario-backend","environment":"production","errors":{"phone":{"name":"ValidatorError","message":"El teléfono es requerido","properties":{"message":"El teléfono es requerido","type":"required","path":"phone"},"kind":"required","path":"phone"}},"_message":"User validation failed"}
+ValidationError: User validation failed: phone: El teléfono es requerido
+    at Document.invalidate (C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\document.js:3219:32)
+    at C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\document.js:3012:17
+    at C:\Turnario\TurnarioApp\backend\node_modules\mongoose\lib\schematype.js:1368:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2025-09-02 01:48:00 [ERROR]: Error sending verification email: Cannot read properties of undefined (reading 'transporter') {"service":"turnario-backend","environment":"production"}
+TypeError: Cannot read properties of undefined (reading 'transporter')
+    at sendEmail (C:\Turnario\TurnarioApp\backend\services\emailService.js:133:17)
+    at register (C:\Turnario\TurnarioApp\backend\controllers\authController.js:85:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-02 01:54:45 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329b641fdc0sm1775540a91.7 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329b641fdc0sm1775540a91.7 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329b641fdc0sm1775540a91.7 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 01:56:36 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24af5ff6edesm23715405ad.78 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24af5ff6edesm23715405ad.78 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24af5ff6edesm23715405ad.78 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 02:01:43 [ERROR]: Error sending verification email: Cannot read properties of undefined (reading 'transporter') {"service":"turnario-backend","environment":"production"}
+TypeError: Cannot read properties of undefined (reading 'transporter')
+    at sendEmail (C:\Turnario\TurnarioApp\backend\services\emailService.js:133:17)
+    at register (C:\Turnario\TurnarioApp\backend\controllers\authController.js:85:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-02 02:04:58 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da2a05sm117125765ad.72 - gsmtp {"service":"turnario-backend","environment":"production","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da2a05sm117125765ad.72 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24905da2a05sm117125765ad.72 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-02 02:07:05 [ERROR]: Error sending verification email: Cannot read properties of undefined (reading 'transporter') {"service":"turnario-backend","environment":"production"}
+TypeError: Cannot read properties of undefined (reading 'transporter')
+    at sendEmail (C:\Turnario\TurnarioApp\backend\services\emailService.js:133:17)
+    at register (C:\Turnario\TurnarioApp\backend\controllers\authController.js:86:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-02 02:07:46 [ERROR]: Error sending verification email: Cannot read properties of undefined (reading 'transporter') {"service":"turnario-backend","environment":"production"}
+TypeError: Cannot read properties of undefined (reading 'transporter')
+    at sendEmail (C:\Turnario\TurnarioApp\backend\services\emailService.js:133:17)
+    at register (C:\Turnario\TurnarioApp\backend\controllers\authController.js:86:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-02 02:08:09 [ERROR]: Error sending verification email: Cannot read properties of undefined (reading 'transporter') {"service":"turnario-backend","environment":"production"}
+TypeError: Cannot read properties of undefined (reading 'transporter')
+    at sendEmail (C:\Turnario\TurnarioApp\backend\services\emailService.js:133:17)
+    at register (C:\Turnario\TurnarioApp\backend\controllers\authController.js:86:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-03 02:06:07 [ERROR]: ❌ Error configurando servicio de email: nodemailer.createTransporter is not a function {"service":"turnario-backend","environment":"development"}
+TypeError: nodemailer.createTransporter is not a function
+    at EmailService.initializeTransporter (C:\Turnario\TurnarioApp\backend\services\emailService.js:18:37)
+    at new EmailService (C:\Turnario\TurnarioApp\backend\services\emailService.js:11:10)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:416:18)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+2025-09-03 02:06:22 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7722a4e1ca7sm15263797b3a.71 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7722a4e1ca7sm15263797b3a.71 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7722a4e1ca7sm15263797b3a.71 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-03 02:07:18 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-772409e1e65sm11560799b3a.101 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-772409e1e65sm11560799b3a.101 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-772409e1e65sm11560799b3a.101 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-05 03:36:03 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 006d021491bc7-61e635c6a44sm1487777eaf.22 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 006d021491bc7-61e635c6a44sm1487777eaf.22 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 006d021491bc7-61e635c6a44sm1487777eaf.22 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-06 02:00:14 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24c7ecd9cafsm95158595ad.83 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24c7ecd9cafsm95158595ad.83 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24c7ecd9cafsm95158595ad.83 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-07 02:49:25 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24cc919880dsm82371715ad.51 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24cc919880dsm82371715ad.51 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24cc919880dsm82371715ad.51 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-07 02:53:40 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-77241f08b3asm22110109b3a.28 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-77241f08b3asm22110109b3a.28 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-77241f08b3asm22110109b3a.28 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-07 02:56:23 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329d08a36b3sm16176987a91.25 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329d08a36b3sm16176987a91.25 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-329d08a36b3sm16176987a91.25 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-07 03:00:36 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24c9a46bcf1sm107732095ad.3 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24c9a46bcf1sm107732095ad.3 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-24c9a46bcf1sm107732095ad.3 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-11 00:58:17 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-25c36cc53bcsm3680085ad.28 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-25c36cc53bcsm3680085ad.28 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-25c36cc53bcsm3680085ad.28 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-11 01:12:17 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-25c37294b4fsm4016705ad.34 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-25c37294b4fsm4016705ad.34 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-25c37294b4fsm4016705ad.34 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-11 01:46:20 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-77607b17d0asm576249b3a.60 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-77607b17d0asm576249b3a.60 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-77607b17d0asm576249b3a.60 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-11 01:47:17 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7760793b65dsm573169b3a.9 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7760793b65dsm573169b3a.9 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7760793b65dsm573169b3a.9 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-11 01:49:37 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 41be03b00d2f7-b54a35ca2basm503589a12.12 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 41be03b00d2f7-b54a35ca2basm503589a12.12 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 41be03b00d2f7-b54a35ca2basm503589a12.12 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+2025-09-11 03:02:43 [ERROR]: ❌ Error configurando servicio de email: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-32dd9903a2asm745330a91.24 - gsmtp {"service":"turnario-backend","environment":"development","code":"EAUTH","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-32dd9903a2asm745330a91.24 - gsmtp","responseCode":535,"command":"AUTH PLAIN"}
+Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 98e67ed59e1d1-32dd9903a2asm745330a91.24 - gsmtp
+    at SMTPConnection._formatError (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1588:34)
+    at SMTPConnection.<anonymous> (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Turnario\TurnarioApp\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)

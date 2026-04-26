@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authService } from '../services/authService';
 
 const AuthContext = createContext();
 
@@ -52,12 +53,26 @@ export const AuthProvider = ({ children }) => {
   const loadStoredAuth = async () => {
     try {
       console.log('🔄 Cargando autenticación almacenada...');
+      
+      // Cargar desde authService (sistema con tokens)
+      const token = await authService.getStoredToken();
+      const authUser = authService.getUser();
+      
+      if (token && authUser) {
+        console.log('👤 Usuario encontrado en authService:', authUser);
+        dispatch({ type: 'SET_USER', payload: authUser });
+        dispatch({ type: 'SET_TOKEN', payload: token });
+        console.log('✅ Usuario y token cargados exitosamente desde authService');
+        return;
+      }
+      
+      // Fallback: cargar desde AsyncStorage (sistema simple)
       const userData = await AsyncStorage.getItem('user_data');
       if (userData) {
         const user = JSON.parse(userData);
-        console.log('👤 Usuario encontrado en almacenamiento:', user);
+        console.log('👤 Usuario encontrado en AsyncStorage:', user);
         dispatch({ type: 'SET_USER', payload: user });
-        console.log('✅ Usuario cargado exitosamente');
+        console.log('✅ Usuario cargado exitosamente desde AsyncStorage');
       } else {
         console.log('ℹ️ No hay usuario almacenado');
       }
@@ -72,30 +87,42 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'CLEAR_ERROR' });
 
-      // Simulación de login simple
-      if (email === 'test@example.com' && password === 'password') {
-        console.log('✅ Login exitoso, creando usuario...');
-        const user = {
-          id: '1',
-          email,
-          name: 'Usuario Test',
-          phone: '+1234567890',
-          userType: 'professional', // Cambiado a profesional para acceder a horarios
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        
-        console.log('💾 Guardando usuario en AsyncStorage...');
-        await AsyncStorage.setItem('user_data', JSON.stringify(user));
-        console.log('👤 Usuario guardado, actualizando estado...');
-        dispatch({ type: 'SET_USER', payload: user });
-        console.log('🎉 Login completado exitosamente');
+      // Intentar login con authService primero (sistema con tokens)
+      try {
+        const authResponse = await authService.login({ email, password });
+        console.log('✅ Login exitoso con authService:', authResponse);
+        dispatch({ type: 'SET_USER', payload: authResponse.user });
+        dispatch({ type: 'SET_TOKEN', payload: authResponse.token });
+        console.log('🎉 Login completado exitosamente con authService');
         return;
+      } catch (authError) {
+        console.log('⚠️ AuthService falló, usando sistema simple:', authError.message);
+        
+        // Fallback: simulación de login simple
+        if (email === 'test@example.com' && password === 'password') {
+          console.log('✅ Login exitoso con sistema simple, creando usuario...');
+          const user = {
+            id: '1',
+            email,
+            name: 'Usuario Test',
+            phone: '+1234567890',
+            userType: 'professional', // Cambiado a profesional para acceder a horarios
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          
+          console.log('💾 Guardando usuario en AsyncStorage...');
+          await AsyncStorage.setItem('user_data', JSON.stringify(user));
+          console.log('👤 Usuario guardado, actualizando estado...');
+          dispatch({ type: 'SET_USER', payload: user });
+          console.log('🎉 Login completado exitosamente con sistema simple');
+          return;
+        }
+        
+        // Login fallido
+        console.log('❌ Credenciales inválidas');
+        throw new Error('Credenciales inválidas. Usa test@example.com / password');
       }
-      
-      // Login fallido
-      console.log('❌ Credenciales inválidas');
-      throw new Error('Credenciales inválidas. Usa test@example.com / password');
     } catch (error) {
       console.error('💥 Error en login:', error);
       dispatch({ type: 'SET_ERROR', payload: error.message });
@@ -131,8 +158,21 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      console.log('🚪 Cerrando sesión...');
+      
+      // Intentar logout con authService
+      try {
+        await authService.logout();
+        console.log('✅ Logout exitoso con authService');
+      } catch (authError) {
+        console.log('⚠️ Error en authService logout, continuando:', authError.message);
+      }
+      
+      // Limpiar AsyncStorage
       await AsyncStorage.removeItem('user_data');
+      
       dispatch({ type: 'LOGOUT' });
+      console.log('🎉 Logout completado');
     } catch (error) {
       console.error('Error durante el logout:', error);
     }

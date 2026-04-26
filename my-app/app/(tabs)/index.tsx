@@ -1,30 +1,163 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  RefreshControl,
-  Modal,
-  TextInput,
-  StyleSheet,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  Linking,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useAuth } from '../../contexts/AuthContext';
-import { useAppointments } from '../../contexts/AppointmentContext';
-import { SERVICES, searchServices } from '../../constants/services';
+import { useRouter, type Href } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    Alert,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import ProfessionalCalendar from '../../components/ProfessionalCalendar';
+import ProfessionalPatientPicker from '../../components/ProfessionalPatientPicker';
+import TimeSlotSelector from '../../components/TimeSlotSelector';
+import { getBackendBaseUrl } from '../../config/backend';
+import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingSlotsService';
 import { createPaymentPreference, openMercadoPagoDirectly } from '../../config/mercadopago';
+import {
+  getServicesByCategory,
+  professionalOffersService,
+  SERVICE_CATEGORIES,
+  SERVICES,
+  searchServices,
+} from '../../constants/services';
+import { useAppointments, type Appointment } from '../../contexts/AppointmentContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useMedicalHistory } from '../../contexts/MedicalHistoryContext';
+import { historyPatientIdFromAppointment } from '../../utils/historyPatientId';
+import { useAvailability } from '../../contexts/AvailabilityContext';
+import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
+import { simpleAuthService } from '../../services/simpleAuthService';
+
+const BACKEND_URL = getBackendBaseUrl();
+
+/** Precio de consulta por defecto si el directorio no trae `price` */
+const CLIENT_RESERVA_TOTAL_AMOUNT = 10000;
+
+function resolveProfessionalMongoId(
+  isProfessionalUser: boolean,
+  userId: string | undefined,
+  appointment: {
+    professionalId: string;
+    professionalName: string;
+  },
+  directory: { id: string; name: string }[]
+): string {
+  if (isProfessionalUser) {
+    return userId || '';
+  }
+  if (appointment.professionalId && appointment.professionalId.length === 24) {
+    return appointment.professionalId;
+  }
+  const found = directory.find((p) => p.name === appointment.professionalName);
+  return found?.id || '';
+}
+
+// Fecha calendario YYYY-MM-DD: parsear como fecha local, no UTC (evita mostrar el día anterior).
+const formatDateForDisplay = (isoDate: string) => {
+  if (!isoDate) return '';
+  const s = String(isoDate).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map((n) => parseInt(n, 10));
+    const date = new Date(y, m - 1, d);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+  }
+  try {
+    const date = new Date(isoDate);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+  return isoDate;
+};
+
+/** Hoy en calendario local YYYY-MM-DD (no usar toISOString: en UTC desfasa respecto a las fechas de las citas). */
+function getLocalTodayYmd(): string {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function appointmentDateYmd(aptDate: string): string | null {
+  const s = String(aptDate || '').trim();
+  const head = s.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head;
+  return null;
+}
+
+function getDashboardStatusMeta(status: string): { label: string; color: string } {
+  switch (status) {
+    case 'completed':
+    case 'finished':
+      return { label: 'Completada', color: '#2196F3' };
+    case 'confirmed':
+      return { label: 'Confirmada', color: '#4CAF50' };
+    case 'pending_approval':
+      return { label: 'Por confirmar', color: '#FF9800' };
+    case 'pending_payment':
+      return { label: 'Pago pendiente', color: '#FF9800' };
+    case 'pending':
+      return { label: 'Pendiente', color: '#FF9800' };
+    case 'cancelled':
+      return { label: 'Cancelada', color: '#F44336' };
+    default:
+      return { label: status || '—', color: '#999' };
+  }
+}
+
+/** Fecha guardada en el formulario: ISO (YYYY-MM-DD) desde ProfessionalCalendar, o legado "día de mes". */
+function parseAppointmentFormDateToLocal(dateStr: string): Date | null {
+  if (!dateStr || !String(dateStr).trim()) return null;
+  const s = String(dateStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map((n) => parseInt(n, 10));
+    const dt = new Date(y, m - 1, d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  const parts = s.split(' de ');
+  if (parts.length >= 2) {
+    const dayNum = parseInt(parts[0], 10);
+    const monthLabel = parts.slice(1).join(' de ');
+    const ref = new Date(`${monthLabel} 1, 2024`);
+    const monthIndex = ref.getMonth();
+    if (!isNaN(dayNum) && !isNaN(monthIndex)) {
+      const dt = new Date(new Date().getFullYear(), monthIndex, dayNum);
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+  }
+  const fallback = new Date(s);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const { appointments } = useAppointments();
+  const { user, logout, hasProAccess } = useAuth();
+  const { appointments, addAppointment, refreshAppointments, getUpcomingAppointments, completeAppointment } =
+    useAppointments();
+  const { recordProfessionalSession } = useMedicalHistory();
+  const { isDateAvailable, availableProfessionals } = useAvailability();
   
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -38,11 +171,46 @@ export default function DashboardScreen() {
     patientName: '',
     patientPhone: '',
     patientEmail: '',
-    professionalName: '', // Nombre del profesional para modo cliente
+    /** ObjectId Mongo del cliente si se eligió usuario registrado o paciente con cuenta */
+    patientClientId: '',
+    professionalName: user?.userType === 'professional' ? (user?.fullName || '') : '', // Nombre del profesional
+    professionalId: '', // ID del profesional seleccionado
+    serviceId: '',
     notes: '',
   });
+  const selectedClientBookingProfessional = useMemo(() => {
+    const id = String(newProfessionalAppointment.professionalId || '').trim();
+    const name = String(newProfessionalAppointment.professionalName || '').trim();
+    if (id) {
+      const byId = availableProfessionals.find((p) => String(p.id) === id);
+      if (byId) return byId;
+    }
+    if (name) {
+      return availableProfessionals.find((p) => p.name === name) ?? null;
+    }
+    return null;
+  }, [
+    availableProfessionals,
+    newProfessionalAppointment.professionalId,
+    newProfessionalAppointment.professionalName,
+  ]);
+  const consultationPriceClientBooking = useMemo(() => {
+    const p = selectedClientBookingProfessional;
+    if (p && typeof p.price === 'number' && !Number.isNaN(p.price) && p.price > 0) {
+      return p.price;
+    }
+    return CLIENT_RESERVA_TOTAL_AMOUNT;
+  }, [selectedClientBookingProfessional]);
+  const clientSeniaPreviewAmount = useMemo(
+    () => Math.max(1, Math.round(consultationPriceClientBooking * 0.2)),
+    [consultationPriceClientBooking]
+  );
   const [isCreatingAppointment, setIsCreatingAppointment] = useState(false);
   const [notificationsSent, setNotificationsSent] = useState<string[]>([]);
+  const [expandedAppointmentId, setExpandedAppointmentId] = useState<string | null>(null);
+  const [sessionModalAppointment, setSessionModalAppointment] = useState<Appointment | null>(null);
+  const [sessionFormNotes, setSessionFormNotes] = useState('');
+  const [sessionFormTreatment, setSessionFormTreatment] = useState('');
   
   // Estados para el calendario de disponibilidad
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
@@ -55,16 +223,16 @@ export default function DashboardScreen() {
   
   // Estados para el catálogo de pacientes
   const [showPatientCatalogModal, setShowPatientCatalogModal] = useState(false);
-  const [patientSearchQuery, setPatientSearchQuery] = useState('');
-  const [catalogView, setCatalogView] = useState<'list' | 'grid'>('list');
   
   // Estados para el selector de servicios
   const [showServiceSelectorModal, setShowServiceSelectorModal] = useState(false);
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('Todas');
   
   // Estados para el selector de profesionales
   const [showProfessionalSelectorModal, setShowProfessionalSelectorModal] = useState(false);
   const [professionalSearchQuery, setProfessionalSearchQuery] = useState('');
+  const [professionalClinicQuery, setProfessionalClinicQuery] = useState('');
   
   // Estados para el modal de pago de seña
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -84,11 +252,187 @@ export default function DashboardScreen() {
   const [isCreatingMercadoPagoPreference, setIsCreatingMercadoPagoPreference] = useState(false);
 
   const isProfessional = user?.userType === 'professional';
+  const { openReservaConSenaModal } = useReservaConSena();
+
+  const loggedUserId = String(user?._id ?? user?.id ?? '').trim();
+  /** Citas del paciente logueado (backend guarda clientId = ObjectId usuario). */
+  const isClientOwnedAppointment = (apt: Appointment) => {
+    if (!loggedUserId) return false;
+    return String(apt.clientId ?? '') === loggedUserId;
+  };
+
+  /** Solo paciente: citas de hoy (fecha API YYYY-MM-DD) y clientId del usuario. */
+  const getTodayAppointmentsCount = () => {
+    if (!appointments?.length || isProfessional) return 0;
+    const todayYmd = getLocalTodayYmd();
+    return appointments.filter((appointment) => {
+      if (!isClientOwnedAppointment(appointment)) return false;
+      const ymd = appointmentDateYmd(appointment.date);
+      return ymd === todayYmd;
+    }).length;
+  };
+
+  const getTodayAppointments = () => {
+    if (!appointments?.length || isProfessional) return [];
+    const todayYmd = getLocalTodayYmd();
+    return appointments.filter((appointment) => {
+      if (!isClientOwnedAppointment(appointment)) return false;
+      const ymd = appointmentDateYmd(appointment.date);
+      return ymd === todayYmd;
+    });
+  };
+
+  // Función para obtener las citas próximas del usuario
+  const getUserUpcomingAppointments = () => {
+    const userId = user?._id || user?.id;
+    console.log('🔍 getUserUpcomingAppointments - userId:', userId);
+    console.log('🔍 getUserUpcomingAppointments - user completo:', user);
+    if (!userId && user?.userType === 'professional') {
+      // Si es profesional, mostrar todas las citas
+      console.log('👨‍⚕️ Profesional sin userId específico, mostrando todas las citas');
+      return getUpcomingAppointments(''); // Pasar string vacío para que el filtro acepte todas
+    }
+    if (!userId) return [];
+    return getUpcomingAppointments(userId);
+  };
+
+  const handleMarkAppointmentComplete = (appointmentId: string) => {
+    Alert.alert(
+      'Marcar como completada',
+      '¿Confirmas que el turno ya se realizó? La cita pasará a estado completada.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sí, completada',
+          onPress: async () => {
+            await completeAppointment(appointmentId);
+            Alert.alert('Listo', 'La cita quedó registrada como completada.');
+          },
+        },
+      ]
+    );
+  };
+
+  const closeProfessionalSessionModal = () => {
+    setSessionModalAppointment(null);
+    setSessionFormNotes('');
+    setSessionFormTreatment('');
+  };
+
+  const openProfessionalSessionModal = (apt: Appointment) => {
+    setSessionModalAppointment(apt);
+    setSessionFormNotes('');
+    setSessionFormTreatment('');
+  };
+
+  const handleSaveProfessionalSession = async () => {
+    if (!sessionModalAppointment || !user) return;
+    const pid = historyPatientIdFromAppointment(sessionModalAppointment);
+    if (!pid) {
+      Alert.alert(
+        'Paciente sin identificador',
+        'Este turno no tiene cliente con cuenta ni datos suficientes (email o nombre). Agregá email en la cita o al paciente para vincular el historial.'
+      );
+      return;
+    }
+    const proId = String(user.id || user._id || '').trim();
+    if (!proId) {
+      Alert.alert('Error', 'No se pudo identificar al profesional.');
+      return;
+    }
+    await recordProfessionalSession({
+      patientId: pid,
+      professionalId: proId,
+      professionalName: user.fullName || (user as { name?: string }).name || 'Profesional',
+      serviceLabel: sessionModalAppointment.service || 'Consulta',
+      appointmentDateYmd: sessionModalAppointment.date,
+      appointmentTime: sessionModalAppointment.time,
+      appointmentId: sessionModalAppointment.id,
+      notes: sessionFormNotes,
+      treatmentSummary: sessionFormTreatment,
+    });
+    closeProfessionalSessionModal();
+  };
+
+  // Función para obtener pacientes de hoy (profesionales)
+  const getTodayPatientsCount = () => {
+    if (!isProfessional || appointments.length === 0) return 0;
+
+    const todayYmd = getLocalTodayYmd();
+
+    const todayAppointments = appointments.filter((apt) => {
+      const ymd = appointmentDateYmd(apt.date);
+      if (!ymd) return false;
+      return (
+        ymd === todayYmd &&
+        (apt.status === 'confirmed' ||
+          apt.status === 'pending' ||
+          apt.status === 'pending_approval')
+      );
+    });
+
+    return todayAppointments.length;
+  };
+
+  // Solicitudes / pagos pendientes que requieren acción del profesional o del flujo
+  const getProfessionalPendingCount = () => {
+    if (!isProfessional || appointments.length === 0) return 0;
+
+    return appointments.filter(
+      (apt) =>
+        apt.status === 'pending_approval' ||
+        apt.status === 'pending_payment' ||
+        apt.status === 'pending'
+    ).length;
+  };
+
+  // Función para contar citas completadas hoy (profesionales)
+  const getTodayCompletedCount = () => {
+    if (!isProfessional || appointments.length === 0) return 0;
+
+    const todayYmd = getLocalTodayYmd();
+
+    return appointments.filter((apt) => {
+      const ymd = appointmentDateYmd(apt.date);
+      if (!ymd) return false;
+      const done = apt.status === 'completed' || apt.status === 'finished';
+      return ymd === todayYmd && done;
+    }).length;
+  };
+
+  // Función para contar las citas pendientes del usuario logueado (paciente)
+  const getPendingAppointmentsCount = () => {
+    if (!appointments || appointments.length === 0) return 0;
+    if (!loggedUserId) return 0;
+
+    return appointments.filter((appointment) => {
+      if (!isClientOwnedAppointment(appointment)) return false;
+      return (
+        appointment.status === 'pending' ||
+        appointment.status === 'pending_payment' ||
+        appointment.status === 'pending_approval'
+      );
+    }).length;
+  };
+
+  // Completadas = realizadas (no confundir con "confirmada" por el profesional)
+  const getCompletedAppointmentsCount = () => {
+    if (!appointments || appointments.length === 0) return 0;
+    if (!loggedUserId) return 0;
+
+    return appointments.filter((appointment) => {
+      if (!isClientOwnedAppointment(appointment)) return false;
+      return appointment.status === 'completed' || appointment.status === 'finished';
+    }).length;
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Simular refresh
-    setTimeout(() => setRefreshing(false), 1000);
+    try {
+      await refreshAppointments();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -112,7 +456,10 @@ export default function DashboardScreen() {
       patientName: '',
       patientPhone: '',
       patientEmail: '',
+      patientClientId: '',
       professionalName: '', // Resetear nombre del profesional
+      professionalId: '', // Resetear ID del profesional
+      serviceId: '',
       notes: '',
     });
     setSelectedDate('');
@@ -126,48 +473,21 @@ export default function DashboardScreen() {
     setShowPatientCatalogModal(true);
   };
 
-  // Función para seleccionar un paciente del catálogo
-  const handlePatientSelect = (patient: any) => {
-    setNewProfessionalAppointment(prev => ({
-      ...prev,
-      patientName: patient.name,
-      patientPhone: patient.phone || '',
-      patientEmail: patient.email || '',
-    }));
-    
-    // Cerrar el catálogo de pacientes
-    setShowPatientCatalogModal(false);
-    setPatientSearchQuery('');
-    
-    // Volver al formulario de Crear Nueva Cita
-    setShowModal(true);
-  };
-
-  // Función para filtrar pacientes según la búsqueda
-  const getFilteredPatients = () => {
-    if (!patientSearchQuery.trim()) {
-      return availablePatients;
-    }
-    
-    const query = patientSearchQuery.toLowerCase();
-    return availablePatients.filter(patient =>
-      patient.name.toLowerCase().includes(query) ||
-      patient.email.toLowerCase().includes(query) ||
-      patient.phone.includes(query)
-    );
-  };
-
   // Función para filtrar servicios según la búsqueda
   const getFilteredServices = () => {
-    if (!serviceSearchQuery.trim()) {
-      return availableServices;
+    let filtered = availableServices;
+
+    if (selectedServiceCategory !== 'Todas') {
+      const categoryServices = new Set(getServicesByCategory(selectedServiceCategory));
+      filtered = filtered.filter((service) => categoryServices.has(service.name));
     }
-    
-    // Usar la función de búsqueda del sistema
-    const filteredServiceNames = searchServices(serviceSearchQuery);
-    return availableServices.filter(service => 
-      filteredServiceNames.includes(service.name)
-    );
+
+    if (serviceSearchQuery.trim()) {
+      const filteredServiceNames = new Set(searchServices(serviceSearchQuery));
+      filtered = filtered.filter((service) => filteredServiceNames.has(service.name));
+    }
+
+    return filtered;
   };
 
   // Función para seleccionar un servicio
@@ -176,6 +496,7 @@ export default function DashboardScreen() {
       ...prev,
       service: service.name,
       professionalName: '', // Resetear profesional al cambiar servicio
+      professionalId: '', // Evitar mantener un ID incompatible con el nuevo servicio
     }));
     
     // Cerrar el selector de servicios
@@ -195,34 +516,96 @@ export default function DashboardScreen() {
       return [];
     }
     
-    // Filtrar profesionales que ofrezcan el servicio seleccionado
-    let filtered = availableProfessionals.filter(professional =>
-      professional.services.includes(selectedService)
+    // Coincidencia flexible: rubro en API vs ítem del catálogo SERVICES
+    let filtered = availableProfessionals.filter((professional) =>
+      professionalOffersService(professional, selectedService, { strict: true })
     );
-    
+
     // Aplicar búsqueda adicional si hay query
     if (professionalSearchQuery.trim()) {
       const query = professionalSearchQuery.toLowerCase();
-      filtered = filtered.filter(professional =>
-        professional.name.toLowerCase().includes(query) ||
-        professional.specialty.toLowerCase().includes(query) ||
-        professional.location.toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (professional) =>
+          professional.name.toLowerCase().includes(query) ||
+          (professional.specialty &&
+            professional.specialty.toLowerCase().includes(query)) ||
+          (professional.location?.toLowerCase().includes(query) ?? false) ||
+          (Array.isArray(professional.clinicNames) &&
+            professional.clinicNames.some((n) => String(n).toLowerCase().includes(query)))
       );
     }
-    
+
+    if (professionalClinicQuery.trim()) {
+      const cq = professionalClinicQuery.toLowerCase().trim();
+      filtered = filtered.filter((professional) => {
+        const loc = (professional.location || '').toLowerCase();
+        const clinics = Array.isArray(professional.clinicNames) ? professional.clinicNames : [];
+        return (
+          loc.includes(cq) ||
+          clinics.some((n) => String(n).toLowerCase().includes(cq))
+        );
+      });
+    }
+
     return filtered;
   };
 
+  // Función para cargar fechas disponibles del profesional
+  const loadProfessionalAvailableDates = async (professionalId: string) => {
+    try {
+      console.log(`📅 Cargando fechas disponibles para profesional ID: ${professionalId}`);
+      
+      // Obtener el mes y año actual
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1; // +1 porque getMonth() devuelve 0-11
+      
+      // Usar el endpoint correcto: /api/v1/date-schedules/{userId}/month/{year}/{month}
+      const url = `${BACKEND_URL}/api/v1/date-schedules/${professionalId}/month/${year}/${month}`;
+      console.log(`🌐 Consultando: ${url}`);
+      
+      // Llamar al backend para obtener horarios del mes
+      const response = await fetch(url);
+      console.log(`📥 Response status: ${response.status}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Respuesta del backend - Horarios encontrados: ${data.count}`);
+        
+        if (data.success && data.data && data.data.length > 0) {
+          console.log(`📆 ${data.count} fechas configuradas encontradas`);
+          console.log(`📆 Primeras fechas:`, data.data.slice(0, 3).map((s: any) => s.date));
+        } else {
+          console.warn('⚠️ No se encontraron fechas configuradas para este profesional');
+        }
+      } else {
+        console.error('❌ Error al obtener horarios del profesional:', response.status);
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
+      }
+    } catch (error) {
+      console.error('❌ Error cargando fechas del profesional:', error);
+    }
+  };
+
   // Función para seleccionar un profesional
-  const handleProfessionalSelect = (professional: any) => {
+  const handleProfessionalSelect = async (professional: any) => {
+    console.log(`👤 Profesional seleccionado:`, professional);
+    console.log(`🆔 ID del profesional:`, professional.id);
+    
     setNewProfessionalAppointment(prev => ({
       ...prev,
       professionalName: professional.name,
+      professionalId: professional.id, // Guardar el ID del profesional
     }));
+    
+    // Cargar fechas disponibles del profesional
+    await loadProfessionalAvailableDates(professional.id);
     
     // Cerrar el selector de profesionales
     setShowProfessionalSelectorModal(false);
     setProfessionalSearchQuery('');
+    setProfessionalClinicQuery('');
     
     // Volver al formulario de Crear Nueva Cita
     setShowModal(true);
@@ -356,117 +739,14 @@ export default function DashboardScreen() {
   });
 
   // Lista de profesionales disponibles por servicio
-  const availableProfessionals = [
-    {
-      id: '1',
-      name: 'Dr. Carlos Mendoza',
-      specialty: 'Psicología y Salud Mental',
-      services: ['Consulta Psicológica', 'Terapia Cognitivo-Conductual', 'Terapia Familiar', 'Psicología Infantil'],
-      rating: 4.8,
-      experience: '15 años',
-      location: 'Buenos Aires',
-      avatar: 'CM',
-    },
-    {
-      id: '2',
-      name: 'Dra. María González',
-      specialty: 'Medicina General',
-      services: ['Consulta Médica General', 'Consulta de Pediatría', 'Consulta de Geriatría'],
-      rating: 4.9,
-      experience: '12 años',
-      location: 'Buenos Aires',
-      avatar: 'MG',
-    },
-    {
-      id: '3',
-      name: 'Lic. Juan Pérez',
-      specialty: 'Fisioterapia',
-      services: ['Fisioterapia General', 'Fisioterapia Deportiva', 'Rehabilitación Post-Quirúrgica'],
-      rating: 4.7,
-      experience: '8 años',
-      location: 'Buenos Aires',
-      avatar: 'JP',
-    },
-    {
-      id: '4',
-      name: 'Dra. Ana Silva',
-      specialty: 'Nutrición',
-      services: ['Consulta Nutricional', 'Nutrición Clínica', 'Nutrición Pediátrica', 'Nutrición Deportiva'],
-      rating: 4.6,
-      experience: '10 años',
-      location: 'Buenos Aires',
-      avatar: 'AS',
-    },
-    {
-      id: '5',
-      name: 'Dr. Roberto Torres',
-      specialty: 'Odontología',
-      services: ['Consulta Odontológica General', 'Limpieza Dental', 'Tratamiento de Caries', 'Ortodoncia'],
-      rating: 4.8,
-      experience: '18 años',
-      location: 'Buenos Aires',
-      avatar: 'RT',
-    },
-    {
-      id: '6',
-      name: 'Lic. Laura Fernández',
-      specialty: 'Terapia Ocupacional',
-      services: ['Terapia Ocupacional General', 'Terapia Ocupacional Pediátrica', 'Rehabilitación de Mano'],
-      rating: 4.5,
-      experience: '6 años',
-      location: 'Buenos Aires',
-      avatar: 'LF',
-    },
-  ];
-
-  // Lista de pacientes disponibles
-  const availablePatients = [
-    {
-      id: '1',
-      name: 'Ana Martínez',
-      phone: '+54 9 11 1234-5678',
-      email: 'ana.martinez@email.com',
-      lastVisit: '15/12/2024'
-    },
-    {
-      id: '2',
-      name: 'Carlos López',
-      phone: '+54 9 11 2345-6789',
-      email: 'carlos.lopez@email.com',
-      lastVisit: '10/12/2024'
-    },
-    {
-      id: '3',
-      name: 'María González',
-      phone: '+54 9 11 3456-7890',
-      email: 'maria.gonzalez@email.com',
-      lastVisit: '08/12/2024'
-    },
-    {
-      id: '4',
-      name: 'Juan Pérez',
-      phone: '+54 9 11 4567-8901',
-      email: 'juan.perez@email.com',
-      lastVisit: '05/12/2024'
-    },
-    {
-      id: '5',
-      name: 'Laura Rodríguez',
-      phone: '+54 9 11 5678-9012',
-      email: 'laura.rodriguez@email.com',
-      lastVisit: '03/12/2024'
-    },
-    {
-      id: '6',
-      name: 'Roberto Silva',
-      phone: '+54 9 11 6789-0123',
-      email: 'roberto.silva@email.com',
-      lastVisit: '01/12/2024'
-    }
-  ];
+  // availableProfessionals ahora viene del contexto
 
   // Función para crear cita y enviar notificación al cliente
   const handleCreateAppointmentAndNotifyClient = async () => {
+    /** _id de ExpoAppointment si el POST al backend fue OK (para contexto y bloqueo) */
+    let mongoAppointmentId: string | undefined;
+    /** Cliente: cita guardada en Mongo con seña → abrir pago Mercado Pago */
+    let clientSavedWithDeposit = false;
     try {
       setIsCreatingAppointment(true);
       
@@ -477,13 +757,49 @@ export default function DashboardScreen() {
           Alert.alert('Error', 'Por favor completa todos los campos obligatorios.');
           return;
         }
-        } else {
+      } else {
         // Para clientes: validar servicio, profesional, fecha y hora
         if (!newProfessionalAppointment.service || !newProfessionalAppointment.professionalName || !newProfessionalAppointment.date || !newProfessionalAppointment.time) {
           Alert.alert('Error', 'Por favor completa todos los campos obligatorios.');
           return;
         }
       }
+
+      const clientRequiresSenia =
+        !isProfessional &&
+        !!selectedClientBookingProfessional &&
+        selectedClientBookingProfessional.clientBookingRequiresDeposit !== false;
+      const clientTotalForApi = consultationPriceClientBooking;
+      const clientDepositForApi = clientRequiresSenia ? clientSeniaPreviewAmount : 0;
+      let depositAmountForPaymentModal = clientDepositForApi;
+
+      const clientMongoId = String(user?._id || user?.id || '').trim();
+      const professionalMongoId = resolveProfessionalMongoId(
+        isProfessional,
+        user?._id || user?.id,
+        {
+          professionalId: newProfessionalAppointment.professionalId,
+          professionalName: newProfessionalAppointment.professionalName,
+        },
+        availableProfessionals
+      );
+
+      if (!isProfessional && (!professionalMongoId || professionalMongoId.length !== 24)) {
+        Alert.alert(
+          'Profesional',
+          'No se pudo determinar el ID del profesional. Elegí de nuevo el profesional en el listado.'
+        );
+        return;
+      }
+
+      if (!isProfessional && !clientMongoId) {
+        Alert.alert('Sesión', 'No se pudo identificar tu usuario. Iniciá sesión nuevamente.');
+        return;
+      }
+
+      const pickedPid = String(newProfessionalAppointment.patientClientId || '').trim();
+      const professionalChosenClientId =
+        isProfessional && /^[a-fA-F0-9]{24}$/.test(pickedPid) ? pickedPid : '';
 
       // Generar ID único para la cita
       const appointmentId = `appointment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -501,40 +817,266 @@ export default function DashboardScreen() {
         patientPhone: newProfessionalAppointment.patientPhone,
         patientEmail: newProfessionalAppointment.patientEmail,
         notes: newProfessionalAppointment.notes,
-        status: 'pending_payment',
+        status: 'confirmed', // ✅ Confirmada directamente para pruebas
         createdAt: new Date().toISOString(),
-        depositRequired: true,
-        depositAmount: 2000,
+        depositRequired: false, // ✅ Sin seña para pruebas
+        depositAmount: 0,
         totalAmount: 10000,
       } : {
         // Para clientes
         id: appointmentId,
         service: newProfessionalAppointment.service,
         professional: newProfessionalAppointment.professionalName,
-        professionalId: 'prof_client_selected',
+        professionalId: professionalMongoId,
         date: newProfessionalAppointment.date,
         time: newProfessionalAppointment.time,
         patientName: user?.fullName || 'Cliente',
         patientPhone: user?.phone || '',
         patientEmail: user?.email || '',
         notes: newProfessionalAppointment.notes,
-        status: 'pending_payment',
+        status: clientRequiresSenia ? 'pending_payment' : 'pending_approval',
         createdAt: new Date().toISOString(),
-        depositRequired: true,
-        depositAmount: 2000,
-        totalAmount: 10000,
+        depositRequired: clientRequiresSenia,
+        depositAmount: clientDepositForApi,
+        totalAmount: clientTotalForApi,
       };
 
       console.log('📋 Cita creada:', newAppointment);
 
-      // Aquí se guardaría la cita en la base de datos
-      // await saveAppointmentToDatabase(newAppointment);
+      // 1. Guardar la cita en la base de datos
+      try {
+        console.log('💾 Guardando cita en la base de datos...');
+        
+        // Obtener la duración de la cita desde la configuración del profesional
+        let appointmentDuration = 30; // Valor por defecto
+        const professionalIdForDuration = isProfessional
+          ? (user?._id || user?.id || '')
+          : professionalMongoId;
+
+        if (professionalIdForDuration && professionalIdForDuration.length === 24) {
+          try {
+            console.log('🔍 Obteniendo configuración del profesional para duración...');
+            const availabilityResponse = await fetch(`${BACKEND_URL}/api/v1/availability/${professionalIdForDuration}`);
+            if (availabilityResponse.ok) {
+              const availabilityData = await availabilityResponse.json();
+              if (availabilityData.success && availabilityData.data && availabilityData.data.appointmentDuration) {
+                appointmentDuration = availabilityData.data.appointmentDuration;
+                console.log(`⏱️ Duración de cita configurada: ${appointmentDuration} minutos`);
+              } else {
+                console.log('⚠️ No se encontró appointmentDuration en la configuración, usando valor por defecto: 30 minutos');
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Error obteniendo configuración del profesional, usando duración por defecto:', error);
+          }
+        }
+        
+        const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        const token = await simpleAuthService.getToken();
+        if (token) authHeaders.Authorization = `Bearer ${token}`;
+
+        const response = await fetch(`${BACKEND_URL}/api/v1/appointments/create`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({
+            professionalId: isProfessional ? (user?._id || user?.id) : professionalMongoId,
+            clientId: isProfessional
+              ? professionalChosenClientId || undefined
+              : clientMongoId,
+            service: newAppointment.service,
+            date: newAppointment.date,
+            time: newAppointment.time,
+            duration: appointmentDuration,
+            patientName: newAppointment.patientName,
+            patientPhone: newAppointment.patientPhone,
+            patientEmail: newAppointment.patientEmail,
+            notes: newAppointment.notes,
+            status: isProfessional ? 'confirmed' : 'pending_approval',
+            totalAmount: newAppointment.totalAmount,
+            professional: newAppointment.professional,
+            bookingSource: isProfessional ? 'professional' : 'client',
+            ...(isProfessional
+              ? {}
+              : {
+                  requireDeposit: clientRequiresSenia,
+                  depositAmount: clientDepositForApi,
+                }),
+          }),
+        });
+
+        if (response.ok) {
+          const savedAppointment = await response.json();
+          console.log('✅ Cita guardada en la base de datos:', savedAppointment);
+          if (
+            savedAppointment?.success &&
+            savedAppointment?.data &&
+            savedAppointment.data._id
+          ) {
+            mongoAppointmentId = String(savedAppointment.data._id);
+            const d = savedAppointment.data;
+            if (!isProfessional && mongoAppointmentId.length === 24) {
+              clientSavedWithDeposit =
+                d.status === 'pending_payment' &&
+                d.paymentStatus === 'pending' &&
+                Number(d.depositAmount) > 0;
+              if (clientSavedWithDeposit && Number(d.depositAmount) > 0) {
+                depositAmountForPaymentModal = Number(d.depositAmount);
+              }
+            }
+          }
+        } else {
+          const errorText = await response.text();
+          console.error('❌ Error guardando cita en DB:', response.status, errorText);
+        }
+      } catch (error) {
+        console.error('❌ Error guardando cita en base de datos:', error);
+        // Continuar con el flujo aunque falle el guardado en DB
+      }
+
+      // 2. Marcar el horario como ocupado eliminándolo de los disponibles
+      try {
+        console.log('🔒 Marcando horario como ocupado...');
+        const professionalIdToUse = isProfessional
+          ? (user?._id || user?.id || '')
+          : professionalMongoId;
+        
+        if (professionalIdToUse && professionalIdToUse.length === 24) {
+          // Obtener el schedule actual de la fecha
+          const scheduleResponse = await fetch(`${BACKEND_URL}/api/v1/date-schedules/${professionalIdToUse}/${newAppointment.date}`);
+          
+          if (scheduleResponse.ok) {
+            const scheduleData = await scheduleResponse.json();
+            console.log('📊 Schedule actual:', scheduleData);
+            
+            if (scheduleData.success && scheduleData.data) {
+              const reservedTime = newAppointment.time;
+              console.log('🎯 Horario a bloquear:', reservedTime);
+              console.log('📊 TimeSlots actuales:', scheduleData.data.timeSlots);
+              
+              // Filtrar y dividir slots que contengan el horario reservado
+              const updatedTimeSlots: any[] = [];
+              
+              scheduleData.data.timeSlots.forEach(slot => {
+                const slotStart = slot.start;
+                const slotEnd = slot.end;
+                
+                // Convertir horarios a minutos para comparación
+                const reservedMinutes = parseInt(reservedTime.split(':')[0]) * 60 + parseInt(reservedTime.split(':')[1]);
+                const slotStartMinutes = parseInt(slotStart.split(':')[0]) * 60 + parseInt(slotStart.split(':')[1]);
+                const slotEndMinutes = parseInt(slotEnd.split(':')[0]) * 60 + parseInt(slotEnd.split(':')[1]);
+                
+                // Si el horario reservado está fuera de este slot, mantenerlo
+                if (reservedMinutes < slotStartMinutes || reservedMinutes >= slotEndMinutes) {
+                  updatedTimeSlots.push(slot);
+                } else {
+                  // El horario está dentro de este slot, dividir el slot
+                  console.log(`🔪 Dividiendo slot ${slotStart}-${slotEnd} para excluir ${reservedTime}`);
+                  
+                  // Crear slot antes del horario reservado (si existe espacio)
+                  if (slotStartMinutes < reservedMinutes) {
+                    updatedTimeSlots.push({
+                      start: slotStart,
+                      end: reservedTime,
+                      isCustom: false
+                    });
+                  }
+                  
+                  // Crear slot después del horario reservado (si existe espacio)
+                  const reservedEndMinutes = reservedMinutes + 30; // Asumiendo citas de 30 min
+                  if (reservedEndMinutes < slotEndMinutes) {
+                    const reservedEndHour = Math.floor(reservedEndMinutes / 60);
+                    const reservedEndMin = reservedEndMinutes % 60;
+                    const reservedEndTime = `${reservedEndHour.toString().padStart(2, '0')}:${reservedEndMin.toString().padStart(2, '0')}`;
+                    
+                    updatedTimeSlots.push({
+                      start: reservedEndTime,
+                      end: slotEnd,
+                      isCustom: false
+                    });
+                  }
+                }
+              });
+              
+              console.log('🔄 TimeSlots actualizados (sin el horario reservado):', updatedTimeSlots);
+              
+              // Actualizar el schedule en la base de datos
+              const updateResponse = await fetch(`${BACKEND_URL}/api/v1/date-schedules/${professionalIdToUse}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  professionalId: professionalIdToUse,
+                  professionalName: user?.fullName || 'Profesional',
+                  date: newAppointment.date,
+                  timeSlots: updatedTimeSlots,
+                  isAvailable: updatedTimeSlots.length > 0,
+                }),
+              });
+              
+              if (updateResponse.ok) {
+                const updateResult = await updateResponse.json();
+                console.log('✅ Horario marcado como ocupado en la base de datos:', updateResult);
+              } else {
+                const errorText = await updateResponse.text();
+                console.error('❌ Error actualizando horarios disponibles:', errorText);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error marcando horario como ocupado:', error);
+        // Continuar con el flujo aunque falle la actualización
+      }
+
+      // 3. Agregar la cita al contexto para que aparezca inmediatamente
+      try {
+        await addAppointment({
+          id: mongoAppointmentId,
+          professionalId: newAppointment.professionalId,
+          professional: newAppointment.professional,
+          service: newAppointment.service,
+          date: newAppointment.date,
+          time: newAppointment.time,
+          patientName: newAppointment.patientName,
+          patientPhone: newAppointment.patientPhone,
+          patientEmail: newAppointment.patientEmail,
+          notes: newAppointment.notes,
+          totalAmount: newAppointment.totalAmount,
+          status: isProfessional
+            ? 'confirmed'
+            : clientSavedWithDeposit
+              ? 'pending_payment'
+              : 'pending_approval',
+          clientId: isProfessional ? professionalChosenClientId || '' : clientMongoId,
+          patientId: isProfessional ? professionalChosenClientId || '' : clientMongoId,
+        });
+        console.log('✅ Cita agregada al contexto y aparecerá en la vista de hoy');
+        
+        // Refrescar las citas para asegurar que aparezca en la vista de hoy
+        await refreshAppointments();
+        console.log('🔄 Citas refrescadas, la nueva cita debería aparecer en la vista de hoy');
+
+        if (clientSavedWithDeposit && mongoAppointmentId) {
+          openReservaConSenaModal({
+            appointmentId: mongoAppointmentId,
+            depositAmount: depositAmountForPaymentModal,
+            service: newAppointment.service,
+            date: newAppointment.date,
+            time: newAppointment.time,
+            professional: newProfessionalAppointment.professionalName,
+            professionalName: newProfessionalAppointment.professionalName,
+            professionalId: professionalMongoId,
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error agregando cita al contexto:', error);
+        // Continuar con el flujo aunque falle la actualización del contexto
+      }
 
       // Mostrar confirmación según el tipo de usuario
       if (isProfessional) {
         Alert.alert(
-          '✅ Cita Creada Exitosamente',
-          `La cita para ${newProfessionalAppointment.patientName} ha sido creada.\n\nServicio: ${newProfessionalAppointment.service}\nFecha: ${newProfessionalAppointment.date}\nHora: ${newProfessionalAppointment.time}\n\nSe ha enviado una notificación al cliente para que pague la seña de $2000.`,
+          '✅ Cita Creada y Confirmada',
+          `La cita para ${newProfessionalAppointment.patientName} ha sido creada y confirmada automáticamente.\n\nServicio: ${newProfessionalAppointment.service}\nFecha: ${formatDateForDisplay(newProfessionalAppointment.date)}\nHora: ${newProfessionalAppointment.time}\n\nSe ha enviado una notificación al cliente.`,
           [
             {
               text: 'Ver Detalles',
@@ -551,25 +1093,19 @@ export default function DashboardScreen() {
             }
           ]
         );
-    } else {
+    } else if (clientSavedWithDeposit) {
+        // El modal de pago (DepositPaymentHost) se abre automáticamente; no duplicar con Alert.
+      } else if (mongoAppointmentId) {
         Alert.alert(
-          '✅ Reserva Creada Exitosamente',
-          `Tu cita ha sido reservada exitosamente.\n\nServicio: ${newProfessionalAppointment.service}\nProfesional: ${newProfessionalAppointment.professionalName}\nFecha: ${newProfessionalAppointment.date}\nHora: ${newProfessionalAppointment.time}\n\nPara confirmar tu cita, debes pagar la seña de $2000.`,
-          [
-            {
-              text: 'Ver Detalles',
-              onPress: () => {
-                console.log('📋 Mostrando detalles de la reserva:', newAppointment);
-              }
-            },
-            {
-              text: 'Pagar Seña',
-              onPress: () => {
-                console.log('💳 Iniciando pago con MercadoPago...');
-                handleMercadoPagoPayment();
-              }
-            }
-          ]
+          'Solicitud enviada',
+          'Tu reserva quedó registrada. El profesional debe confirmarla; te avisaremos por notificaciones.',
+          [{ text: 'Entendido', style: 'default' }]
+        );
+      } else {
+        Alert.alert(
+          'No se pudo registrar',
+          'No pudimos guardar tu reserva en el servidor. Revisá tu conexión e intentá de nuevo.',
+          [{ text: 'Entendido', style: 'default' }]
         );
       }
 
@@ -585,28 +1121,49 @@ export default function DashboardScreen() {
     }
   };
 
-  // Funciones para el calendario de disponibilidad
-  const getProfessionalAvailability = () => {
-    // Disponibilidad por defecto (lunes a viernes)
-    return {
-      'monday': true,
-      'tuesday': true,
-      'wednesday': true,
-      'thursday': true,
-      'friday': true,
-      'saturday': false,
-      'sunday': false
-    };
-  };
+  // Función para verificar si una fecha está disponible para el profesional seleccionado
+  const checkDateAvailability = (date: Date) => {
+    // Verificar que la fecha sea válida
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      console.error('❌ Fecha inválida en checkDateAvailability:', date);
+      return false;
+    }
+    
+    if (!newProfessionalAppointment.professionalName) {
+      // Si no hay profesional seleccionado, usar disponibilidad por defecto
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const dayName = dayNames[date.getDay()];
+      const defaultAvailability = {
+        'monday': true,
+        'tuesday': true,
+        'wednesday': true,
+        'thursday': true,
+        'friday': true,
+        'saturday': true,
+        'sunday': false
+      };
+      return defaultAvailability[dayName as keyof typeof defaultAvailability];
+    }
 
-  const isDateAvailable = (date: Date) => {
-    const availability = getProfessionalAvailability();
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayName = dayNames[date.getDay()] as keyof typeof availability;
-    return availability[dayName];
+    // Obtener el ID del profesional seleccionado
+    const selectedProfessional = availableProfessionals.find(prof => 
+      prof.name === newProfessionalAppointment.professionalName
+    );
+    
+    if (!selectedProfessional) return false;
+
+    // Usar la función isDateAvailable del contexto de disponibilidad
+    // que ahora verifica la configuración real de la base de datos
+    return isDateAvailable(selectedProfessional.id, date);
   };
 
   const getDaysInMonth = (date: Date) => {
+    // Verificar que la fecha sea válida
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      console.error('❌ Fecha inválida en getDaysInMonth:', date);
+      return [];
+    }
+    
     const year = date.getFullYear();
     const month = date.getMonth();
     const firstDay = new Date(year, month, 1);
@@ -614,7 +1171,7 @@ export default function DashboardScreen() {
     const firstDayOfWeek = firstDay.getDay();
     const daysInMonth = lastDay.getDate();
     
-    const days = [];
+    const days: { day: number; isCurrentMonth: boolean; isAvailable: boolean }[] = [];
     
     // Agregar días del mes anterior para completar la primera semana
     for (let i = firstDayOfWeek - 1; i >= 0; i--) {
@@ -629,13 +1186,20 @@ export default function DashboardScreen() {
     // Agregar días del mes actual
     for (let day = 1; day <= daysInMonth; day++) {
       const checkDate = new Date(year, month, day);
+      
+      // Verificar que la fecha sea válida
+      if (isNaN(checkDate.getTime())) {
+        console.error('❌ Fecha inválida generada en getDaysInMonth:', { year, month, day });
+        continue;
+      }
+      
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
       days.push({
         day,
         isCurrentMonth: true,
-        isAvailable: isDateAvailable(checkDate) && checkDate >= today,
+        isAvailable: checkDateAvailability(checkDate) && checkDate >= today,
       });
     }
     
@@ -657,13 +1221,62 @@ export default function DashboardScreen() {
     console.log('🎯 useEffect - showModal cambió a:', showModal);
   }, [showModal]);
 
-  // Efecto para generar horarios disponibles cuando se selecciona una fecha
+  // Efecto para actualizar el nombre del profesional cuando el usuario cambie
   useEffect(() => {
-    if (newProfessionalAppointment.date) {
-      const timeSlots = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '15:30', '16:00', '17:00'];
-      setAvailableTimeSlots(timeSlots);
+    if (user?.userType === 'professional' && user?.fullName) {
+      setNewProfessionalAppointment(prev => ({
+        ...prev,
+        professionalName: user.fullName,
+        service: user.service || prev.service
+      }));
     }
-  }, [newProfessionalAppointment.date]);
+  }, [user]);
+
+  // Efecto para actualizar la vista cuando cambian las citas
+  useEffect(() => {
+    const todayAppointments = getTodayAppointments();
+    console.log('🔄 Citas de hoy actualizadas:', todayAppointments.length);
+    console.log('📋 Detalles de citas de hoy:', todayAppointments.map(apt => ({
+      id: apt.id,
+      patientName: apt.patientName,
+      time: apt.time,
+      service: apt.service
+    })));
+  }, [appointments]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const defaultTimeSlots = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '15:30', '16:00', '17:00'];
+
+    (async () => {
+      if (newProfessionalAppointment.date && newProfessionalAppointment.professionalName) {
+        const selectedProfessional = availableProfessionals.find(
+          (prof) => prof.name === newProfessionalAppointment.professionalName
+        );
+
+        if (selectedProfessional) {
+          const selectedDate = parseAppointmentFormDateToLocal(newProfessionalAppointment.date);
+          if (!selectedDate) {
+            if (!cancelled) setAvailableTimeSlots(defaultTimeSlots);
+            return;
+          }
+          const ymd = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+          const slots = await getBookableTimeSlotsForProfessionalDate(selectedProfessional.id, ymd);
+          if (!cancelled) setAvailableTimeSlots(slots.length > 0 ? slots : []);
+        } else if (!cancelled) {
+          setAvailableTimeSlots(defaultTimeSlots);
+        }
+      } else if (newProfessionalAppointment.date) {
+        if (!cancelled) setAvailableTimeSlots(defaultTimeSlots);
+      } else if (!cancelled) {
+        setAvailableTimeSlots([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [newProfessionalAppointment.date, newProfessionalAppointment.professionalName, availableProfessionals]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -692,6 +1305,30 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
+      {isProfessional && !hasProAccess() ? (
+        <TouchableOpacity
+          style={styles.subscribeBanner}
+          activeOpacity={0.88}
+          onPress={() => router.push('/subscribe' as Href)}
+          accessibilityRole="button"
+          accessibilityLabel="Suscribirse a Turnario Pro"
+        >
+          <View style={styles.subscribeBannerIconWrap}>
+            <Ionicons name="sparkles" size={22} color="#667eea" />
+          </View>
+          <View style={styles.subscribeBannerTextCol}>
+            <Text style={styles.subscribeBannerTitle}>Turnario Pro</Text>
+            <Text style={styles.subscribeBannerSubtitle}>
+              Activá tu plan desde Google Play para usar todas las funciones.
+            </Text>
+          </View>
+          <View style={styles.subscribeBannerCta}>
+            <Text style={styles.subscribeBannerCtaText}>Suscribirse</Text>
+            <Ionicons name="chevron-forward" size={18} color="#fff" />
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
       <View style={styles.statsContainer}>
         <Text style={styles.sectionTitle}>
           {isProfessional ? 'Resumen del Día' : 'Resumen del Día'}
@@ -699,23 +1336,23 @@ export default function DashboardScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Ionicons name={isProfessional ? "people" : "calendar"} size={24} color="#4CAF50" />
-            <Text style={styles.statNumber}>{isProfessional ? '8' : '3'}</Text>
+            <Text style={styles.statNumber}>{isProfessional ? getTodayPatientsCount() : getTodayAppointmentsCount()}</Text>
             <Text style={styles.statLabel}>
               {isProfessional ? 'Pacientes Hoy' : 'Citas Hoy'}
             </Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="time" size={24} color="#2196F3" />
-            <Text style={styles.statNumber}>{isProfessional ? '6' : '2'}</Text>
+            <Text style={styles.statNumber}>{isProfessional ? getProfessionalPendingCount() : getPendingAppointmentsCount()}</Text>
             <Text style={styles.statLabel}>
               {isProfessional ? 'Citas Pendientes' : 'Pendientes'}
             </Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-            <Text style={styles.statNumber}>{isProfessional ? '2' : '1'}</Text>
-            <Text style={styles.statLabel}>
-              {isProfessional ? 'Completadas' : 'Completadas'}
+            <Text style={styles.statNumber}>{isProfessional ? getTodayCompletedCount() : getCompletedAppointmentsCount()}</Text>
+            <Text style={styles.statLabel} numberOfLines={1}>
+              {isProfessional ? 'Completadas Hoy' : 'Completadas'}
             </Text>
           </View>
         </View>
@@ -725,6 +1362,20 @@ export default function DashboardScreen() {
         <Text style={styles.sectionTitle}>
           {isProfessional ? 'Próximas Citas' : 'Próximas Citas'}
         </Text>
+        {(() => {
+          const upcomingAppointments = getUserUpcomingAppointments();
+          console.log('📋 Citas próximas del usuario:', upcomingAppointments.length);
+          console.log('📋 Detalles de citas próximas:', upcomingAppointments.map(apt => ({
+            id: apt.id,
+            patientName: apt.patientName,
+            date: apt.date,
+            time: apt.time,
+            service: apt.service,
+            status: apt.status
+          })));
+          
+          if (upcomingAppointments.length === 0) {
+            return (
               <View style={styles.emptyAppointmentsContainer}>
                 <Ionicons name="calendar-outline" size={48} color="#ccc" />
                 <Text style={styles.emptyAppointmentsTitle}>No tienes citas programadas</Text>
@@ -732,19 +1383,128 @@ export default function DashboardScreen() {
                   {isProfessional ? 'No hay citas pendientes para hoy' : 'Reserva tu primera cita usando el botón de abajo'}
                 </Text>
               </View>
+            );
+          }
+          
+          return (
+            <View style={styles.appointmentsList}>
+              {upcomingAppointments.map((appointment) => {
+                const statusMeta = getDashboardStatusMeta(appointment.status);
+                const canMarkComplete =
+                  isProfessional &&
+                  appointment.status !== 'cancelled' &&
+                  appointment.status !== 'completed' &&
+                  appointment.status !== 'finished';
+                const HeaderWrapper = isProfessional ? TouchableOpacity : View;
+                const headerPressProps = isProfessional
+                  ? {
+                      activeOpacity: 0.7 as const,
+                      onPress: () =>
+                        setExpandedAppointmentId((prev) =>
+                          prev === appointment.id ? null : appointment.id
+                        ),
+                    }
+                  : {};
+                return (
+                  <View key={appointment.id} style={styles.appointmentCard}>
+                    <HeaderWrapper style={styles.appointmentHeader} {...headerPressProps}>
+                      <Ionicons
+                        name={isProfessional ? 'person' : 'medical'}
+                        size={20}
+                        color="#4CAF50"
+                      />
+                      <Text style={styles.appointmentTitle}>
+                        {isProfessional
+                          ? appointment.patientName || appointment.clientName
+                          : appointment.professional}
+                      </Text>
+                      <View style={[styles.statusBadge, { backgroundColor: statusMeta.color }]}>
+                        <Text style={styles.statusText}>{statusMeta.label}</Text>
+                      </View>
+                      {isProfessional ? (
+                        <Ionicons
+                          name={expandedAppointmentId === appointment.id ? 'chevron-up' : 'chevron-down'}
+                          size={22}
+                          color="#666"
+                          style={{ marginLeft: 4 }}
+                        />
+                      ) : null}
+                    </HeaderWrapper>
+                    <View style={styles.appointmentDetails}>
+                      <Text style={styles.appointmentService}>{appointment.service}</Text>
+                      <Text style={styles.appointmentDateTime}>
+                        {appointment.date} - {appointment.time}
+                      </Text>
+                      {appointment.notes ? (
+                        <Text style={styles.appointmentNotes}>{appointment.notes}</Text>
+                      ) : null}
+                      {isProfessional && expandedAppointmentId === appointment.id ? (
+                        <View style={styles.appointmentExpanded}>
+                          <Text style={styles.appointmentExpandHint}>
+                            Registrá notas y tratamiento de esta sesión para el historial del paciente (Gestión de
+                            pacientes).
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.sessionHistoryButton}
+                            onPress={() => openProfessionalSessionModal(appointment)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="clipboard" size={20} color="#fff" style={{ marginRight: 8 }} />
+                            <Text style={styles.sessionHistoryButtonText}>Notas y tratamiento de la sesión</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                      {canMarkComplete && (
+                        <TouchableOpacity
+                          style={styles.completeAppointmentButton}
+                          onPress={() => handleMarkAppointmentComplete(appointment.id)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="checkmark-done" size={18} color="#fff" style={{ marginRight: 8 }} />
+                          <Text style={styles.completeAppointmentButtonText}>Marcar como completada</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })()}
       </View>
 
         <View style={styles.actionContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
             onPress={openModal}
           >
             <Ionicons name="add-circle" size={20} color="white" />
           <Text style={styles.actionButtonText}>
-              {isProfessional ? 'Reservar Cita' : 'Reservar con Seña'}
+              {isProfessional ? 'Nueva Cita (Prof)' : 'Reservar Cita'}
           </Text>
         </TouchableOpacity>
         
+        <TouchableOpacity
+          style={[styles.actionButton, styles.profileButton]}
+          onPress={() => router.push('/user-profile')}
+        >
+          <Ionicons name="person-circle" size={20} color="white" />
+          <Text style={styles.actionButtonText}>
+            Ver Perfil Completo
+          </Text>
+        </TouchableOpacity>
+
+        {isProfessional && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.calendarButton]}
+            onPress={() => router.push('/calendar')}
+          >
+            <Ionicons name="calendar" size={20} color="white" />
+            <Text style={styles.actionButtonText}>
+              Mi Calendario
+            </Text>
+          </TouchableOpacity>
+        )}
 
       </View>
 
@@ -761,7 +1521,7 @@ export default function DashboardScreen() {
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderLeft}>
                 <Text style={styles.modalTitle}>
-                  {isProfessional ? 'Crear Nueva Cita' : 'Reservar Cita con Seña'}
+                  {isProfessional ? 'Crear Nueva Cita' : 'Reservar Cita'}
                 </Text>
                 {!isProfessional && (
                   <View style={styles.formProgressContainer}>
@@ -906,7 +1666,7 @@ export default function DashboardScreen() {
                    styles.dateSelectorText,
                     !newProfessionalAppointment.date && styles.dateSelectorPlaceholder
                  ]}>
-                    {newProfessionalAppointment.date || 'Seleccionar fecha disponible...'}
+                    {newProfessionalAppointment.date ? formatDateForDisplay(newProfessionalAppointment.date) : 'Seleccionar fecha disponible...'}
                  </Text>
                   {newProfessionalAppointment.date ? (
                     <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
@@ -918,38 +1678,16 @@ export default function DashboardScreen() {
 
              <View style={styles.formSection}>
                <Text style={styles.formLabel}>Hora *</Text>
-                       <TouchableOpacity
-                         style={[
-                    styles.timeSelectorButton,
-                    !newProfessionalAppointment.date && styles.timeSelectorButtonDisabled,
-                    newProfessionalAppointment.time && styles.timeSelectorButtonValid
-                  ]}
-                  onPress={() => {
-                    if (newProfessionalAppointment.date) {
-                      setShowTimePickerModal(true);
-                    }
-                  }}
-                  disabled={!newProfessionalAppointment.date}
-                       >
-                         <Text style={[
-                    styles.timeSelectorText,
-                    !newProfessionalAppointment.time && styles.timeSelectorPlaceholder
-                         ]}>
-                    {newProfessionalAppointment.time || 
-                      (newProfessionalAppointment.date 
-                        ? 'Seleccionar horario disponible...' 
-                        : 'Primero selecciona una fecha')}
-                         </Text>
-                  {newProfessionalAppointment.time ? (
-                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                  ) : (
-                    <Ionicons 
-                      name="time" 
-                      size={20} 
-                      color={newProfessionalAppointment.date ? "#667eea" : "#ccc"} 
-                    />
-                  )}
-                </TouchableOpacity>
+               <TimeSlotSelector
+                 selectedTime={newProfessionalAppointment.time}
+                 onTimeSelect={(time: string) => setNewProfessionalAppointment(prev => ({ ...prev, time }))}
+                 selectedDate={newProfessionalAppointment.date}
+                 professionalId={isProfessional ? (user?._id || user?.id || user?.userId || '3') : availableProfessionals.find(prof => prof.name === newProfessionalAppointment.professionalName)?.id}
+                 clinicId={user?.clinicId || '1'}
+                 serviceId={newProfessionalAppointment.serviceId || '1'}
+                 placeholder="Seleccionar horario disponible..."
+                 style={styles.timeSlotSelector}
+               />
              </View>
 
               <View style={styles.formSection}>
@@ -965,56 +1703,46 @@ export default function DashboardScreen() {
                 />
               </View>
 
-              {/* Botón de debug temporal */}
+              {/* Detalle de costos (solo cliente; seña según perfil del profesional) */}
               {!isProfessional && (
-                <View style={styles.formSection}>
-                  <TouchableOpacity
-                    style={styles.debugButton}
-                    onPress={() => {
-                      Alert.alert(
-                        'DEBUG - Valores del Formulario',
-                        `Servicio: "${newProfessionalAppointment.service}"\n` +
-                        `Profesional: "${newProfessionalAppointment.professionalName}"\n` +
-                        `Fecha: "${newProfessionalAppointment.date}"\n` +
-                        `Hora: "${newProfessionalAppointment.time}"\n\n` +
-                        `Tipo de usuario: ${user?.userType}\n` +
-                        `isProfessional: ${isProfessional}`,
-                        [{ text: 'OK', style: 'default' }]
-                      );
-                    }}
-                  >
-                    <Text style={styles.debugButtonText}>🔍 Debug - Ver Valores</Text>
-                  </TouchableOpacity>
+                <View style={styles.costSection}>
+                  <Text style={styles.costSectionTitle}>Detalle de Costos</Text>
+                  <View style={styles.costRow}>
+                    <Text style={styles.costLabel}>Costo de la Consulta:</Text>
+                    <Text style={styles.costValue}>
+                      ${Math.round(consultationPriceClientBooking).toLocaleString('es-AR')}
+                    </Text>
+                  </View>
+                  {selectedClientBookingProfessional &&
+                    selectedClientBookingProfessional.clientBookingRequiresDeposit !== false && (
+                      <>
+                        <View style={styles.costRow}>
+                          <Text style={styles.costLabel}>Seña (20%):</Text>
+                          <Text style={styles.costValue}>
+                            ${clientSeniaPreviewAmount.toLocaleString('es-AR')}
+                          </Text>
+                        </View>
+                        <View style={styles.costDivider} />
+                      </>
+                    )}
+                  <View style={styles.costRow}>
+                    <Text style={styles.costLabel}>Total a pagar:</Text>
+                    <Text style={styles.costTotal}>
+                      ${Math.round(consultationPriceClientBooking).toLocaleString('es-AR')}
+                    </Text>
+                  </View>
+                  <View style={styles.costNote}>
+                    <Text style={styles.costNoteText}>
+                      {selectedClientBookingProfessional &&
+                      selectedClientBookingProfessional.clientBookingRequiresDeposit !== false
+                        ? `* La seña de $${clientSeniaPreviewAmount.toLocaleString('es-AR')} se debe pagar para confirmar la cita`
+                        : selectedClientBookingProfessional
+                          ? 'Este profesional no requiere seña: solo pagás el costo de la consulta al momento del servicio (salvo que el consultorio indique lo contrario).'
+                          : 'Seleccioná un profesional para ver si la reserva incluye seña.'}
+                    </Text>
+                  </View>
                 </View>
               )}
-
-              {/* Detalle de costos */}
-              <View style={styles.costSection}>
-                <Text style={styles.costSectionTitle}>Detalle de Costos</Text>
-                
-                <View style={styles.costRow}>
-                  <Text style={styles.costLabel}>Costo de la Consulta:</Text>
-                  <Text style={styles.costValue}>$10,000</Text>
-                </View>
-                
-                <View style={styles.costRow}>
-                  <Text style={styles.costLabel}>Seña (20%):</Text>
-                  <Text style={styles.costValue}>$2,000</Text>
-                </View>
-                
-                <View style={styles.costDivider} />
-                
-                <View style={styles.costRow}>
-                  <Text style={styles.costLabel}>Total a pagar:</Text>
-                  <Text style={styles.costTotal}>$10,000</Text>
-                </View>
-                
-                <View style={styles.costNote}>
-                  <Text style={styles.costNoteText}>
-                    * La seña de $2,000 se debe pagar para confirmar la cita
-                  </Text>
-                </View>
-              </View>
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -1053,7 +1781,7 @@ export default function DashboardScreen() {
                     }
                   } else {
                     // Validación específica para clientes
-                    const missingFields = [];
+                    const missingFields: string[] = [];
                     
                     if (!newProfessionalAppointment.service || newProfessionalAppointment.service.trim() === '') {
                       missingFields.push('• Servicio');
@@ -1102,7 +1830,7 @@ export default function DashboardScreen() {
                   <Text style={styles.saveButtonText}>Creando...</Text>
                 ) : (
                   <Text style={styles.saveButtonText}>
-                    {isProfessional ? 'Crear Cita y Notificar Cliente' : 'Reservar Cita con Seña'}
+                    {isProfessional ? 'Crear Cita y Notificar Cliente' : 'Confirmar Cita'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -1110,107 +1838,17 @@ export default function DashboardScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* Modal selector de fecha */}
-      <Modal
+        {/* Modal selector de fecha mejorado */}
+        <ProfessionalCalendar
           visible={showDatePickerModal}
-        animationType="slide"
-          transparent={false}
-          onRequestClose={() => setShowDatePickerModal(false)}
-      >
-          <View style={styles.datePickerModalContainer}>
-            <View style={styles.datePickerModalHeader}>
-              <Text style={styles.datePickerModalTitle}>Seleccionar Fecha</Text>
-            <TouchableOpacity
-                onPress={() => setShowDatePickerModal(false)}
-                style={styles.datePickerCloseButton}
-            >
-                <Ionicons name="close" size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-
-            <View style={styles.calendarContainer}>
-              {/* Navegación del mes */}
-              <View style={styles.calendarNavigation}>
-                <TouchableOpacity
-                  style={styles.calendarNavButton}
-                  onPress={() => {
-                    setCurrentMonth(prev => {
-                      const newMonth = new Date(prev);
-                      newMonth.setMonth(prev.getMonth() - 1);
-                      return newMonth;
-                    });
-                  }}
-                >
-                  <Ionicons name="chevron-back" size={24} color="#007AFF" />
-                </TouchableOpacity>
-                
-                <Text style={styles.calendarMonthText}>
-                  {currentMonth.toLocaleDateString('es-ES', { 
-                    month: 'long', 
-                    year: 'numeric' 
-                  })}
-             </Text>
-             
-                   <TouchableOpacity
-                  style={styles.calendarNavButton}
-                  onPress={() => {
-                    setCurrentMonth(prev => {
-                      const newMonth = new Date(prev);
-                      newMonth.setMonth(prev.getMonth() + 1);
-                      return newMonth;
-                    });
-                  }}
-                >
-                  <Ionicons name="chevron-forward" size={24} color="#007AFF" />
-                   </TouchableOpacity>
-               </View>
-
-              {/* Días de la semana */}
-              <View style={styles.weekDaysContainer}>
-                {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day, index) => (
-                  <Text key={`weekday-${day}-${index}`} style={styles.weekDayText}>{day}</Text>
-                ))}
-             </View>
-             
-              {/* Calendario */}
-              <View style={styles.calendarGrid}>
-                {getDaysInMonth(currentMonth).map((dayObj, index) => (
-                 <TouchableOpacity
-                    key={`day-${dayObj.day}-${index}`}
-                    style={[
-                      styles.calendarDay,
-                      !dayObj.isCurrentMonth && styles.calendarDayOtherMonth,
-                      !dayObj.isAvailable && styles.calendarDayUnavailable,
-                      dayObj.isAvailable && styles.calendarDayAvailable
-                    ]}
-                   onPress={() => {
-                      if (dayObj.isAvailable) {
-                        const selectedDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dayObj.day);
-                        // Mostrar solo el día disponible en formato más simple
-                        const formattedDate = selectedDate.toLocaleDateString('es-ES', {
-                          day: 'numeric',
-                          month: 'long'
-                        });
-                        setNewProfessionalAppointment(prev => ({ ...prev, date: formattedDate }));
-                        setShowDatePickerModal(false);
-                      }
-                    }}
-                    disabled={!dayObj.isAvailable}
-                  >
-                    <Text style={[
-                      styles.calendarDayText,
-                      !dayObj.isCurrentMonth && styles.calendarDayTextOtherMonth,
-                      !dayObj.isAvailable && styles.calendarDayTextUnavailable,
-                      dayObj.isAvailable && styles.calendarDayTextAvailable
-                    ]}>
-                      {dayObj.day}
-                    </Text>
-                 </TouchableOpacity>
-               ))}
-                 </View>
-            </View>
-        </View>
-      </Modal>
+          onClose={() => setShowDatePickerModal(false)}
+          onDateSelect={(formattedDate) => {
+            setNewProfessionalAppointment(prev => ({ ...prev, date: formattedDate }));
+          }}
+          professionalId={isProfessional ? (user?._id || user?.id || user?.userId || '3') : (newProfessionalAppointment.professionalId || availableProfessionals.find(prof => prof.name === newProfessionalAppointment.professionalName)?.id || '3')}
+          selectedDate={newProfessionalAppointment.date}
+          isProfessional={isProfessional}
+        />
 
         {/* Modal selector de hora */}
       <Modal
@@ -1248,124 +1886,24 @@ export default function DashboardScreen() {
           </View>
         </Modal>
 
-        {/* Modal de catálogo de pacientes */}
-        <Modal
+        <ProfessionalPatientPicker
           visible={showPatientCatalogModal}
-          animationType="slide"
-          presentationStyle="pageSheet"
-        >
-          <KeyboardAvoidingView 
-            style={styles.modalContainer}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Paciente</Text>
-                 <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => {
-                  setShowPatientCatalogModal(false);
-                  setPatientSearchQuery('');
-                }}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-                 </TouchableOpacity>
-               </View>
-             
-            <View style={styles.catalogHeader}>
-             <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color="#666" />
-                 <TextInput
-                   style={styles.searchInput}
-                  placeholder="Buscar paciente..."
-                  value={patientSearchQuery}
-                  onChangeText={setPatientSearchQuery}
-                   placeholderTextColor="#999"
-                 />
-              </View>
-              
-              <View style={styles.viewToggleContainer}>
-                   <TouchableOpacity
-                  style={[
-                    styles.viewToggleButton,
-                    catalogView === 'list' && styles.viewToggleButtonActive
-                  ]}
-                  onPress={() => setCatalogView('list')}
-                >
-                  <Ionicons 
-                    name="list" 
-                    size={20} 
-                    color={catalogView === 'list' ? '#667eea' : '#666'} 
-                  />
-                   </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.viewToggleButton,
-                    catalogView === 'grid' && styles.viewToggleButtonActive
-                  ]}
-                  onPress={() => setCatalogView('grid')}
-                >
-                  <Ionicons 
-                    name="grid" 
-                    size={20} 
-                    color={catalogView === 'grid' ? '#667eea' : '#666'} 
-                  />
-                </TouchableOpacity>
-               </View>
-             </View>
-             
-            <ScrollView style={styles.catalogContent}>
-              {catalogView === 'list' ? (
-                // Vista de lista
-                <View style={styles.patientList}>
-                  {getFilteredPatients().map((patient) => (
-               <TouchableOpacity
-                      key={patient.id}
-                      style={styles.patientListItem}
-                      onPress={() => handlePatientSelect(patient)}
-                    >
-                      <View style={styles.patientAvatar}>
-                        <Text style={styles.patientInitials}>
-                          {patient.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={styles.patientInfo}>
-                        <Text style={styles.patientName}>{patient.name}</Text>
-                        <Text style={styles.patientDetails}>
-                          {patient.phone} • {patient.email}
-                        </Text>
-                        {patient.lastVisit && (
-                          <Text style={styles.patientLastVisit}>
-                            Última visita: {patient.lastVisit}
-                          </Text>
-                        )}
-                      </View>
-                      <Ionicons name="chevron-forward" size={20} color="#666" />
-               </TouchableOpacity>
-             ))}
-                </View>
-              ) : (
-                // Vista de cuadrícula
-                <View style={styles.patientGrid}>
-                  {getFilteredPatients().map((patient) => (
-                   <TouchableOpacity
-                      key={patient.id}
-                      style={styles.patientGridItem}
-                      onPress={() => handlePatientSelect(patient)}
-                    >
-                      <View style={styles.patientAvatar}>
-                        <Text style={styles.patientInitials}>
-                          {patient.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text style={styles.patientGridName}>{patient.name}</Text>
-                      <Text style={styles.patientGridPhone}>{patient.phone}</Text>
-                   </TouchableOpacity>
-                  ))}
-               </View>
-             )}
-           </ScrollView>
-          </KeyboardAvoidingView>
-       </Modal>
+          professionalId={String(user?._id || user?.id || '')}
+          onClose={() => setShowPatientCatalogModal(false)}
+          onSelect={(p) => {
+            const mongoId =
+              p.clientId && /^[a-fA-F0-9]{24}$/.test(p.clientId) ? p.clientId : '';
+            setNewProfessionalAppointment((prev) => ({
+              ...prev,
+              patientName: p.name,
+              patientPhone: p.phone || '',
+              patientEmail: p.email || '',
+              patientClientId: mongoId,
+            }));
+            setShowPatientCatalogModal(false);
+            setShowModal(true);
+          }}
+        />
 
         {/* Modal de selección de servicios */}
       <Modal
@@ -1384,6 +1922,7 @@ export default function DashboardScreen() {
                 onPress={() => {
                   setShowServiceSelectorModal(false);
                   setServiceSearchQuery('');
+                  setSelectedServiceCategory('Todas');
                 }}
               >
                 <Ionicons name="close" size={24} color="#666" />
@@ -1402,6 +1941,28 @@ export default function DashboardScreen() {
                 />
               </View>
             </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryScroll}
+              contentContainerStyle={styles.categoryScrollContent}
+            >
+              {SERVICE_CATEGORIES.map((category) => {
+                const isActive = selectedServiceCategory === category;
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                    onPress={() => setSelectedServiceCategory(category)}
+                  >
+                    <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>
+                      {category}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
             
             <ScrollView style={styles.catalogContent}>
               <View style={styles.serviceList}>
@@ -1447,6 +2008,7 @@ export default function DashboardScreen() {
                 onPress={() => {
                   setShowProfessionalSelectorModal(false);
                   setProfessionalSearchQuery('');
+                  setProfessionalClinicQuery('');
                 }}
               >
                 <Ionicons name="close" size={24} color="#666" />
@@ -1461,6 +2023,16 @@ export default function DashboardScreen() {
                   placeholder="Buscar profesional..."
                   value={professionalSearchQuery}
                   onChangeText={setProfessionalSearchQuery}
+                  placeholderTextColor="#999"
+                />
+              </View>
+              <View style={[styles.searchContainer, { marginTop: 10 }]}>
+                <Ionicons name="business" size={20} color="#666" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Filtrar por consultorio..."
+                  value={professionalClinicQuery}
+                  onChangeText={setProfessionalClinicQuery}
                   placeholderTextColor="#999"
                 />
               </View>
@@ -1483,6 +2055,11 @@ export default function DashboardScreen() {
                       <View style={styles.professionalInfo}>
                         <Text style={styles.professionalName}>{professional.name}</Text>
                         <Text style={styles.professionalSpecialty}>{professional.specialty}</Text>
+                        {Array.isArray(professional.clinicNames) && professional.clinicNames.length > 0 ? (
+                          <Text style={styles.professionalClinics} numberOfLines={2}>
+                            {professional.clinicNames.join(' · ')}
+                          </Text>
+                        ) : null}
                         <View style={styles.professionalDetails}>
                           <View style={styles.professionalRating}>
                             <Ionicons name="star" size={16} color="#FFD700" />
@@ -1551,7 +2128,7 @@ export default function DashboardScreen() {
                   </View>
                   <View style={styles.paymentDetailRow}>
                     <Text style={styles.paymentDetailLabel}>Fecha y Hora:</Text>
-                    <Text style={styles.paymentDetailValue}>{newProfessionalAppointment.date} - {newProfessionalAppointment.time}</Text>
+                    <Text style={styles.paymentDetailValue}>{formatDateForDisplay(newProfessionalAppointment.date)} - {newProfessionalAppointment.time}</Text>
                   </View>
                   <View style={styles.paymentDetailRow}>
                     <Text style={styles.paymentDetailLabel}>Monto a Pagar:</Text>
@@ -1618,6 +2195,68 @@ export default function DashboardScreen() {
                  </View>
           </KeyboardAvoidingView>
          </Modal>
+
+        <Modal
+          visible={!!sessionModalAppointment}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={closeProfessionalSessionModal}
+        >
+          <KeyboardAvoidingView
+            style={styles.modalContainer}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Notas y tratamiento · sesión</Text>
+              <TouchableOpacity onPress={closeProfessionalSessionModal} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+              {sessionModalAppointment ? (
+                <View style={styles.formSection}>
+                  <Text style={styles.formLabel}>Paciente</Text>
+                  <Text style={styles.sessionModalMeta}>
+                    {sessionModalAppointment.patientName ||
+                      sessionModalAppointment.clientName ||
+                      '—'}
+                  </Text>
+                  <Text style={styles.formLabel}>Turno</Text>
+                  <Text style={styles.sessionModalMeta}>
+                    {sessionModalAppointment.date} · {sessionModalAppointment.time} ·{' '}
+                    {sessionModalAppointment.service}
+                  </Text>
+                  <Text style={styles.formLabel}>Notas de la sesión</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.sessionMultilineInput]}
+                    placeholder="Evolución, observaciones, acuerdos…"
+                    value={sessionFormNotes}
+                    onChangeText={setSessionFormNotes}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                  <Text style={styles.formLabel}>Tratamiento / indicaciones de esta sesión</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.sessionMultilineInput]}
+                    placeholder="Técnicas aplicadas, tareas, medicación indicada…"
+                    value={sessionFormTreatment}
+                    onChangeText={setSessionFormTreatment}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                  <TouchableOpacity
+                    style={styles.sessionSaveButton}
+                    onPress={() => void handleSaveProfessionalSession()}
+                    activeOpacity={0.9}
+                  >
+                    <Ionicons name="save" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.sessionSaveButtonText}>Guardar en historial</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1656,6 +2295,59 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f2ff',
     borderRadius: 8,
   },
+  subscribeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: '#667eea',
+    borderRadius: 12,
+    gap: 12,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  subscribeBannerIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subscribeBannerTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  subscribeBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  subscribeBannerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.92)',
+    lineHeight: 16,
+  },
+  subscribeBannerCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    gap: 2,
+  },
+  subscribeBannerCtaText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
   statsContainer: {
     padding: 20,
   },
@@ -1673,7 +2365,7 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: 'white',
-    padding: 20,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     shadowColor: '#000',
@@ -1681,6 +2373,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    minWidth: 100,
   },
   statNumber: {
     fontSize: 24,
@@ -1690,9 +2383,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#666',
     textAlign: 'center',
+    flexWrap: 'nowrap',
+    minWidth: 80,
   },
   section: {
     padding: 20,
@@ -1738,6 +2433,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  profileButton: {
+    backgroundColor: '#4CAF50',
+    marginTop: 12,
+  },
+  calendarButton: {
+    backgroundColor: '#FF9800',
+    marginTop: 12,
+  },
   secondaryButton: {
     backgroundColor: 'transparent',
     borderWidth: 2,
@@ -1745,85 +2448,6 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: '#667eea',
-  },
-  
-  // Estilos del modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    width: '90%',
-    maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#374151',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalBody: {
-    padding: 20,
-  },
-  modalText: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  formSection: {
-    marginBottom: 20,
-  },
-  formLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  formText: {
-    fontSize: 14,
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
-  },
-  formActions: {
-    marginTop: 20,
-  },
-  formButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  cancelButtonText: {
-    color: '#6B7280',
-    fontSize: 14,
-    fontWeight: '600',
   },
   
   // Estilos para el modal de reserva de cita
@@ -1870,125 +2494,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // Estilos para el selector de servicios
-  serviceItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  serviceItemText: {
-    fontSize: 16,
-    color: '#374151',
-  },
-  
-  // Estilos para el selector de profesionales
-  professionalItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  professionalInfo: {
-    flex: 1,
-  },
-  professionalName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  professionalService: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  professionalDetails: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  professionalRating: {
-    fontSize: 12,
-    color: '#F59E0B',
-  },
-  professionalPrice: {
-    fontSize: 12,
-    color: '#059669',
-    fontWeight: '600',
-  },
-  
-  // Estilos para el calendario
-  calendarContainer: {
-    padding: 20,
-  },
-  calendarNavigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  calendarNavButton: {
-    padding: 8,
-  },
-  calendarMonthText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#374151',
-    textTransform: 'capitalize',
-  },
-  weekDaysContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  weekDayText: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  calendarDay: {
-    width: '14.28%',
-    aspectRatio: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  calendarDayOtherMonth: {
-    backgroundColor: '#F9FAFB',
-  },
-  calendarDayUnavailable: {
-    backgroundColor: '#F3F4F6',
-  },
-  calendarDayAvailable: {
-    backgroundColor: '#E8F5E9', // Verde claro para días disponibles
-  },
-  calendarDayText: {
-    fontSize: 16,
-    color: '#374151',
-  },
-  calendarDayTextOtherMonth: {
-    color: '#9CA3AF',
-  },
-  calendarDayTextUnavailable: {
-    color: '#D1D5DB',
-  },
-  calendarDayTextAvailable: {
-    color: '#2E7D32', // Verde oscuro para el texto de días disponibles
-  },
-  
-  // Estilos para el selector de hora
+  // Estilos para el selector de hora (lista en modal)
   timeSlotsContainer: {
     padding: 20,
   },
@@ -2040,6 +2546,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 20,
+    paddingBottom: Platform.OS === 'android' ? 34 : 20,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     gap: 15,
@@ -2221,6 +2728,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     fontSize: 14,
     color: '#374151',
+  },
+  categoryScroll: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+    maxHeight: 44,
+  },
+  categoryScrollContent: {
+    paddingRight: 20,
+    alignItems: 'center',
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#fff',
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  categoryChipActive: {
+    backgroundColor: '#667eea',
+    borderColor: '#667eea',
+  },
+  categoryChipText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+  categoryChipTextActive: {
+    color: '#fff',
   },
   viewToggleContainer: {
     flexDirection: 'row',
@@ -2541,7 +3081,13 @@ const styles = StyleSheet.create({
   professionalSpecialty: {
     fontSize: 14,
     color: '#6B7280',
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  professionalClinics: {
+    fontSize: 12,
+    color: '#6366E1',
+    marginBottom: 6,
+    fontWeight: '500',
   },
   professionalDetails: {
     flexDirection: 'row',
@@ -2628,20 +3174,6 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#4CAF50',
     borderRadius: 2,
-  },
-
-  // Estilos para el botón de debug
-  debugButton: {
-    backgroundColor: '#FF6B6B',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  debugButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
   },
 
   // Estilos para el modal de MercadoPago
@@ -2736,5 +3268,137 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#3B82F6',
     marginLeft: 28,
+  },
+  
+  // Estilos para el TimeSlotSelector
+  timeSlotSelector: {
+    marginTop: 4,
+  },
+  
+  // Estilos para las tarjetas de citas
+  appointmentsList: {
+    gap: 12,
+  },
+  appointmentCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  appointmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  appointmentTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginLeft: 8,
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
+  },
+  appointmentDetails: {
+    marginLeft: 28,
+  },
+  appointmentService: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  appointmentDateTime: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  appointmentNotes: {
+    fontSize: 12,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  completeAppointmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#2196F3',
+    borderRadius: 10,
+  },
+  completeAppointmentButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  appointmentExpanded: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e0e0e0',
+  },
+  appointmentExpandHint: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  sessionHistoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#00897B',
+    borderRadius: 10,
+  },
+  sessionHistoryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  sessionModalMeta: {
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 12,
+  },
+  sessionMultilineInput: {
+    minHeight: 100,
+    paddingTop: 12,
+    marginBottom: 14,
+  },
+  sessionSaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingVertical: 14,
+    backgroundColor: '#4CAF50',
+    borderRadius: 10,
+  },
+  sessionSaveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -1,0 +1,10 @@
+# Ignore backend folder to avoid conflicts
+../backend/
+../backend/**
+backend/
+backend/**
+node_modules/
+.expo/
+dist/
+coverage/
+*.log

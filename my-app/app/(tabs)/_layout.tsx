@@ -1,24 +1,25 @@
-import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '../../contexts/AuthContext';
+import { isProfessionalUser } from '../../utils/userType';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+function TabLayoutContent() {
   const { user } = useAuth();
-  const isProfessional = user?.userType === 'professional';
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+  const isProfessional = isProfessionalUser(user);
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Colors.light.tint,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
@@ -52,6 +53,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'WhatsApp',
+          tabBarIcon: ({ color }) => <Ionicons name="logo-whatsapp" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="notifications"
         options={{
           title: 'Notificaciones',
@@ -67,4 +75,8 @@ export default function TabLayout() {
       />
     </Tabs>
   );
+}
+
+export default function TabLayout() {
+  return <TabLayoutContent />;
 }

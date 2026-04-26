@@ -1,0 +1,43 @@
+# Keep EAS upload small and stable
+
+# Dependencies and package-manager caches
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Expo/Metro local state
+.expo/
+.expo-shared/
+.metro-cache/
+dist/
+web-build/
+
+# Native build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/.cxx/
+ios/Pods/
+ios/build/
+
+# Local environment and logs
+.env
+.env.*
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Project-specific folders not needed in mobile EAS build
+backend/
+**/backend/
+docs/
+check-users.js
+test-*.js
+test-*.ts
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/

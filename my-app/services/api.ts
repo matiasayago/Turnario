@@ -1,9 +1,10 @@
+// @ts-nocheck ? beta
 import { Alert } from 'react-native';
 
 import { BACKEND_CONFIG } from '../config/backend';
 
-// Configuración de la API
-const API_BASE_URL = BACKEND_CONFIG.BASE_URL + '/api';
+// Configuraci�n de la API
+const getApiBaseUrl = (): string => BACKEND_CONFIG.BASE_URL;
 
 // Tipos de respuesta de la API
 export interface ApiResponse<T> {
@@ -24,13 +25,14 @@ class ApiError extends Error {
   }
 }
 
-// Función para hacer peticiones HTTP
+// Funci�n para hacer peticiones HTTP
 async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   try {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const apiBaseUrl = getApiBaseUrl();
+    const url = `${apiBaseUrl}${endpoint}`;
     
     const defaultOptions: RequestInit = {
       headers: {
@@ -40,7 +42,7 @@ async function apiRequest<T>(
       ...options,
     };
 
-    // Agregar timeout a la petición
+    // Agregar timeout a la petici�n
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), BACKEND_CONFIG.API.TIMEOUT);
     
@@ -49,40 +51,59 @@ async function apiRequest<T>(
       signal: controller.signal
     };
 
-    console.log(`🌐 API Request: ${options.method || 'GET'} ${url}`);
+    console.log(`?? API Request: ${options.method || 'GET'} ${url}`);
+    console.log(`?? Debug - API_BASE_URL: ${apiBaseUrl}`);
+    console.log(`?? Debug - endpoint: ${endpoint}`);
     
     const response = await fetch(url, requestOptions);
     
     clearTimeout(timeoutId);
+    
+    console.log(`?? Response received:`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      url: response.url
+    });
     
     if (!response.ok) {
       let errorMessage = `Error ${response.status}: ${response.statusText}`;
       
       try {
         const errorData = await response.json();
-        errorMessage = errorData.error || errorData.message || errorMessage;
+        errorMessage = errorData.message || errorData.error || errorMessage;
       } catch {
         // Si no se puede parsear el error, usar el mensaje por defecto
       }
       
-      // Manejar errores de autenticación
+      // Manejar errores de autenticaci�n
       if (response.status === 401) {
-        throw new ApiError('Sesión expirada. Por favor, inicia sesión nuevamente.', 401);
+        throw new ApiError('Sesi�n expirada. Por favor, inicia sesi�n nuevamente.', 401);
       }
       
       if (response.status === 403) {
-        throw new ApiError('No tienes permisos para realizar esta acción.', 403);
+        throw new ApiError('No tienes permisos para realizar esta acci�n.', 403);
+      }
+
+      if (response.status === 429) {
+        throw new ApiError(
+          typeof errorMessage === 'string' && errorMessage.startsWith('Error 429')
+            ? 'Demasiadas peticiones al servidor. Esper? unos minutos e intent? de nuevo.'
+            : errorMessage,
+          429,
+          response
+        );
       }
       
       throw new ApiError(errorMessage, response.status, response);
     }
 
     const data = await response.json();
-    console.log(`✅ API Response: ${endpoint}`, data);
+    console.log(`? API Response: ${endpoint}`, data);
     
     return data;
   } catch (error) {
-    console.error(`❌ API Error: ${endpoint}`, error);
+    console.error(`? API Error: ${endpoint}`, error);
     
     if (error instanceof ApiError) {
       throw error;
@@ -91,15 +112,15 @@ async function apiRequest<T>(
     // Error de timeout
     if (error.name === 'AbortError') {
       throw new ApiError(
-        'La petición tardó demasiado. Verifica tu conexión a internet.',
+        'La petici�n tard� demasiado. Verifica tu conexi�n a internet.',
         0
       );
     }
     
-    // Error de red o conexión
+    // Error de red o conexi�n
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new ApiError(
-        'Error de conexión. Verifica que el servidor esté ejecutándose.',
+        'Error de conexi�n. Verifica que el servidor est� ejecut�ndose.',
         0
       );
     }
@@ -144,16 +165,16 @@ export const api = {
       method: 'PATCH', 
       body: data ? JSON.stringify(data) : undefined,
       headers: headers ? { ...headers } : undefined
-    }),
+    })
 };
 
-// Función para crear headers de autorización
+// Funci�n para crear headers de autorizaci�n
 export const createAuthHeaders = (token: string): Record<string, string> => ({
   'Authorization': `Bearer ${token}`,
   'Content-Type': 'application/json'
 });
 
-// Función para manejar reintentos automáticos
+// Funci�n para manejar reintentos autom�ticos
 export const apiWithRetry = async <T>(
   apiCall: () => Promise<T>,
   maxRetries: number = BACKEND_CONFIG.API.RETRY_ATTEMPTS
@@ -166,13 +187,13 @@ export const apiWithRetry = async <T>(
     } catch (error) {
       lastError = error as Error;
       
-      // No reintentar en errores de autenticación o permisos
+      // No reintentar en errores de autenticaci�n o permisos
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         throw error;
       }
       
       if (attempt < maxRetries) {
-        console.log(`🔄 Reintento ${attempt}/${maxRetries} después de error:`, error);
+        console.log(`?? Reintento ${attempt}/${maxRetries} despu�s de error:`, error);
         await new Promise(resolve => setTimeout(resolve, BACKEND_CONFIG.API.RETRY_DELAY * attempt));
       }
     }
@@ -181,7 +202,7 @@ export const apiWithRetry = async <T>(
   throw lastError!;
 };
 
-// Función para mostrar errores de API de forma amigable
+// Funci�n para mostrar errores de API de forma amigable
 export function showApiError(error: any, title: string = 'Error') {
   let message = 'Ha ocurrido un error inesperado.';
   

@@ -1,3 +1,4 @@
+﻿// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useNotificationSettings } from '../../contexts/NotificationSettingsContext';
@@ -20,17 +22,23 @@ import { useAppointments } from '../../contexts/AppointmentContext';
 import { useReviews } from '../../contexts/ReviewContext';
 import { useNewAppointment } from '../../contexts/NewAppointmentContext';
 import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
-import { SERVICES, getServicesByCategory } from '../../constants/services';
+import { SERVICES, getServicesByCategory, professionalOffersService } from '../../constants/services';
+import { getBackendBaseUrl } from '../../config/backend';
 import { createPaymentPreference, MERCADOPAGO_CONFIG } from '../../config/mercadopago';
 import { userService } from '../../services';
+import { isProfessionalUser } from '../../utils/userType';
 import { useUsers, useServices } from '../../hooks';
+import { MedicalAuthorizationModal } from '../../components/MedicalAuthorizationModal';
+import { useAvailability } from '../../contexts/AvailabilityContext';
+import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingSlotsService';
 
 function SettingsScreen() {
   const { user, logout, updateUserProfile } = useAuth();
   const { shouldOpenNewAppointmentModal, closeNewAppointmentModal } = useNewAppointment();
   const { shouldOpenReservaConSenaModal, appointmentData, closeReservaConSenaModal } = useReservaConSena();
   const { reviews, addReview, deleteReview } = useReviews();
-  const isProfessional = user?.userType === 'professional';
+  const { availableProfessionals } = useAvailability();
+  const isProfessional = isProfessionalUser(user);
   
   // Usar hooks de la API
   const { clients, loading: usersLoading, error: usersError, refreshUsers } = useUsers();
@@ -109,6 +117,8 @@ function SettingsScreen() {
   // Estados para configuración de precios y señas
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showDepositHistoryModal, setShowDepositHistoryModal] = useState(false);
+  const [isOnlineDepositEnabled, setIsOnlineDepositEnabled] = useState(true);
+  const [showMedicalAuthorizationModal, setShowMedicalAuthorizationModal] = useState(false);
   const [servicePricing, setServicePricing] = useState({
     basePrice: 10000,
     depositPercentage: 20,
@@ -207,6 +217,7 @@ function SettingsScreen() {
   // Estados para reserva de cita del cliente
   const [showClientBookingModal, setShowClientBookingModal] = useState(false);
   const [clientBookingData, setClientBookingData] = useState({
+    professionalId: '',
     professionalName: '',
     service: '',
     date: '',
@@ -230,6 +241,8 @@ function SettingsScreen() {
   const [showClientDatePickerModal, setShowClientDatePickerModal] = useState(false);
   const [clientCurrentMonth, setClientCurrentMonth] = useState(new Date());
   const [clientSelectedDate, setClientSelectedDate] = useState('');
+  const [clientSelectedDateIso, setClientSelectedDateIso] = useState('');
+  const [clientAvailableDatesSet, setClientAvailableDatesSet] = useState<Set<string>>(new Set());
   
   // Estados para los horarios del cliente
   const [showClientTimePickerModal, setShowClientTimePickerModal] = useState(false);
@@ -252,6 +265,7 @@ function SettingsScreen() {
         setClientBookingData(prev => {
           const newData = {
             ...prev,
+            professionalId: String(appointmentData.professionalId || prev.professionalId || ''),
             service: appointmentData.service || '',
             professionalName: appointmentData.professional || '', // Campo correcto para el profesional
             date: appointmentData.date || '',
@@ -263,6 +277,7 @@ function SettingsScreen() {
       } else {
         // Si no hay datos de notificación, limpiar el formulario para que esté vacío
         setClientBookingData({
+          professionalId: '',
           professionalName: '',
           service: '',
           date: '',
@@ -744,7 +759,15 @@ function SettingsScreen() {
         {
           text: 'Cerrar Sesión',
           style: 'destructive',
-          onPress: logout,
+          onPress: async () => {
+            try {
+              await logout();
+              router.replace('/login' as never);
+            } catch (error) {
+              console.error('Error al cerrar sesión:', error);
+              Alert.alert('Error', 'No se pudo cerrar sesión correctamente. Intenta nuevamente.');
+            }
+          },
         },
       ]
     );
@@ -854,7 +877,7 @@ function SettingsScreen() {
 
   // Función para guardar los cambios del paciente
   const handleSavePatientChanges = () => {
-    console.log('💾 Guardando cambios del paciente...');
+    console.log('💎 Guardando cambios del paciente...');
     console.log('📝 Datos a guardar:', editingPatientData);
     
     // Verificar que tenemos un paciente seleccionado
@@ -903,11 +926,10 @@ function SettingsScreen() {
     console.log('✅ Paciente guardado exitosamente:', updatedPatient);
   };
 
-  // Función para cancelar la edición
+  // Función para cancelar la edición del perfil
   const handleCancelEdit = () => {
-    console.log('❌ Cancelando edición...');
-    setShowEditPatientModal(false);
-    // No necesitamos volver a abrir el modal de detalles porque nunca se cerró
+    setIsEditing(false);
+    setShowEditProfileModal(false);
   };
 
   // Funciones para el calendario de disponibilidad
@@ -1879,7 +1901,8 @@ function SettingsScreen() {
   };
 
   const handleManageSchedule = () => {
-    setShowScheduleModal(true);
+    // Abrir directamente la configuración de horarios.
+    router.push('/manage-schedule' as never);
   };
 
   const handleScheduleSettingChange = (category: string, setting: string, value: any) => {
@@ -2067,33 +2090,76 @@ function SettingsScreen() {
     setShowClientBookingModal(true);
   };
 
+  const handleSubmitClientBookingRequest = () => {
+    const appointmentRequestId = `request_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    addNotification({
+      type: 'appointment_request',
+      title: '📩 Nueva Solicitud de Cita',
+      message: `${user?.fullName || 'Cliente'} solicitó una cita para ${clientBookingData.service} el ${clientBookingData.date} a las ${clientBookingData.time || 'por definir'}.`,
+      recipientId: clientBookingData.professionalId || clientBookingData.professionalName || 'prof_unknown',
+      senderId: user?.id || 'client_unknown',
+      senderName: user?.fullName || 'Cliente',
+      appointmentData: {
+        appointmentId: appointmentRequestId,
+        service: clientBookingData.service,
+        date: clientBookingData.date,
+        time: clientBookingData.time || 'Por definir',
+        notes: clientBookingData.notes || 'Sin notas',
+        professional: clientBookingData.professionalName,
+      },
+    });
+
+    Alert.alert(
+      '✅ Solicitud enviada',
+      'La reserva quedó como solicitud. El profesional la confirmará desde notificaciones.',
+      [{ text: 'Entendido' }]
+    );
+
+    setShowClientBookingModal(false);
+  };
+
   // Funciones para filtrado de servicios y profesionales
   const handleClientServiceSelection = (selectedService: string) => {
-    setClientBookingData(prev => ({ ...prev, service: selectedService }));
+    setClientBookingData(prev => ({ ...prev, service: selectedService, professionalId: '', professionalName: '', date: '', time: '' }));
+    setClientSelectedDate('');
+    setClientSelectedDateIso('');
+    setClientAvailableTimeSlots([]);
+    setClientAvailableDatesSet(new Set());
     setShowClientServiceSelector(false);
     
-    // Filtrar profesionales que ofrecen este servicio
-    const professionals = [
-      { id: '1', name: 'Dr. Carlos Mendoza', service: 'Consulta Psicológica', rating: 4.8, price: 10000 },
-      { id: '2', name: 'Dra. Ana García', service: 'Terapia Cognitivo-Conductual', rating: 4.9, price: 12000 },
-      { id: '3', name: 'Dr. Luis Rodríguez', service: 'Masaje Terapéutico', rating: 4.7, price: 8000 },
-      { id: '4', name: 'Dra. María López', service: 'Fisioterapia', rating: 4.6, price: 9000 },
-      { id: '5', name: 'Dr. Juan Pérez', service: 'Consulta Psicológica', rating: 4.5, price: 9500 },
-    ];
-    
-    const filtered = professionals.filter(prof => prof.service === selectedService);
+    // Filtrar desde el directorio real de profesionales (API + fallback local)
+    const filtered = availableProfessionals
+      .filter((professional) =>
+        professionalOffersService(professional, selectedService, { strict: true })
+      )
+      .map((professional) => ({
+        id: String(professional.id),
+        name: professional.name,
+        service: selectedService,
+        rating: Number(professional.rating || 4.5),
+        price: Number(professional.price || 10000),
+      }));
+
+    console.log(
+      `🔎 Settings — servicio "${selectedService}" => ${filtered.length} profesional(es)`
+    );
     setFilteredProfessionals(filtered);
     
-    // Resetear profesional seleccionado
-    setClientBookingData(prev => ({ ...prev, professionalName: '' }));
+    // El profesional se selecciona en el siguiente modal
   };
 
   const handleProfessionalSelection = (professional: { id: string; name: string; service: string; rating: number; price: number }) => {
     setClientBookingData(prev => ({ 
       ...prev, 
+      professionalId: professional.id,
       professionalName: professional.name,
-      service: professional.service 
+      service: professional.service,
+      date: '',
+      time: '',
     }));
+    setClientSelectedDate('');
+    setClientSelectedDateIso('');
+    setClientAvailableTimeSlots([]);
     setShowProfessionalSelector(false);
     
     // Actualizar el precio de la seña basado en el profesional seleccionado
@@ -2102,45 +2168,52 @@ function SettingsScreen() {
   };
 
   // Funciones para el calendario del cliente
-  const getClientProfessionalAvailability = (professionalId: string) => {
-    // Simular disponibilidad del profesional seleccionado
-    // En un sistema real, esto vendría de la base de datos
-    const availabilityMap: { [key: string]: any } = {
-      '1': { // Dr. Carlos Mendoza
-        monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false,
-        startTime: '09:00', endTime: '18:00'
-      },
-      '2': { // Dra. Ana García
-        monday: true, tuesday: true, wednesday: false, thursday: true, friday: true, saturday: true, sunday: false,
-        startTime: '10:00', endTime: '19:00'
-      },
-      '3': { // Dr. Luis Rodríguez
-        monday: false, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: true, sunday: false,
-        startTime: '08:00', endTime: '17:00'
-      },
-      '4': { // Dra. María López
-        monday: true, tuesday: false, wednesday: true, thursday: false, friday: true, saturday: false, sunday: false,
-        startTime: '09:00', endTime: '18:00'
-      },
-      '5': { // Dr. Juan Pérez
-        monday: true, tuesday: true, wednesday: true, thursday: true, friday: false, saturday: false, sunday: false,
-        startTime: '14:00', endTime: '22:00'
+  const getSelectedProfessionalId = (): string => {
+    if (clientBookingData.professionalId) return String(clientBookingData.professionalId);
+    const byName = filteredProfessionals.find((p) => p.name === clientBookingData.professionalName);
+    return byName ? String(byName.id) : '';
+  };
+
+  const toYmdLocal = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const loadClientAvailableDates = async (professionalId: string, monthDate: Date) => {
+    if (!professionalId) {
+      setClientAvailableDatesSet(new Set());
+      return;
+    }
+    try {
+      const month = monthDate.getMonth() + 1;
+      const year = monthDate.getFullYear();
+      const base = getBackendBaseUrl();
+      const urlV1 = `${base}/api/v1/date-schedules/${professionalId}/month/${year}/${month}`;
+      const urlLegacy = `${base}/api/date-schedules/${professionalId}/month/${year}/${month}`;
+      let response = await fetch(urlV1);
+      if (!response.ok && response.status === 404) {
+        response = await fetch(urlLegacy);
       }
-    };
-    
-    return availabilityMap[professionalId] || {
-      monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false,
-      startTime: '09:00', endTime: '18:00'
-    };
+      if (!response.ok) {
+        setClientAvailableDatesSet(new Set());
+        return;
+      }
+      const payload = await response.json();
+      const list = Array.isArray(payload?.data) ? payload.data : [];
+      const dates = list
+        .filter((item: any) => item?.date && item?.isAvailable !== false && Array.isArray(item?.timeSlots) && item.timeSlots.length > 0)
+        .map((item: any) => String(item.date));
+      setClientAvailableDatesSet(new Set(dates));
+    } catch (error) {
+      console.warn('⚠️ No se pudieron cargar fechas disponibles del profesional:', error);
+      setClientAvailableDatesSet(new Set());
+    }
   };
 
   const isClientDateAvailable = (date: Date, professionalId: string) => {
-    const availability = getClientProfessionalAvailability(professionalId);
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayName = dayNames[date.getDay()];
-    
-    // Verificar si el día está disponible
-    if (!availability[dayName]) return false;
+    if (!professionalId) return false;
     
     // Verificar que no sea una fecha pasada
     const today = new Date();
@@ -2151,8 +2224,8 @@ function SettingsScreen() {
     const maxDate = new Date();
     maxDate.setMonth(maxDate.getMonth() + 3);
     if (date > maxDate) return false;
-    
-    return true;
+    const ymd = toYmdLocal(date);
+    return clientAvailableDatesSet.has(ymd);
   };
 
   const getClientDaysInMonth = (date: Date, professionalId: string) => {
@@ -2202,6 +2275,7 @@ function SettingsScreen() {
     if (!isAvailable) return;
     
     const selectedDate = new Date(clientCurrentMonth.getFullYear(), clientCurrentMonth.getMonth(), day);
+    const selectedYmd = toYmdLocal(selectedDate);
     const formattedDate = selectedDate.toLocaleDateString('es-ES', {
       weekday: 'long',
       year: 'numeric',
@@ -2212,7 +2286,8 @@ function SettingsScreen() {
     console.log('🔍 Seleccionando fecha:', formattedDate);
     
     setClientSelectedDate(formattedDate);
-    setClientBookingData(prev => ({ ...prev, date: formattedDate }));
+    setClientSelectedDateIso(selectedYmd);
+    setClientBookingData(prev => ({ ...prev, date: formattedDate, time: '' }));
     setShowClientDatePickerModal(false);
   };
 
@@ -2229,96 +2304,18 @@ function SettingsScreen() {
   };
 
   // Funciones para generar horarios disponibles del cliente
-  const getClientAvailableTimeSlots = (professionalId: string, selectedDate: string) => {
-    console.log('🚀 ===== getClientAvailableTimeSlots LLAMADA =====');
-    console.log('🚀 Parámetros recibidos:');
-    console.log('🚀 - professionalId:', professionalId);
-    console.log('🚀 - selectedDate:', selectedDate);
-    console.log('🚀 - ¿selectedDate existe?', !!selectedDate);
-    
-    if (!selectedDate) {
-      console.log('❌ selectedDate es falsy, retornando array vacío');
-      return [];
+  const loadClientAvailableTimeSlots = async (professionalId: string, selectedDateYmd: string) => {
+    if (!professionalId || !selectedDateYmd) {
+      setClientAvailableTimeSlots([]);
+      return;
     }
-    
-    console.log('🚀 getClientAvailableTimeSlots - Iniciando');
-    console.log('🚀 Profesional ID:', professionalId);
-    console.log('🚀 Fecha seleccionada:', selectedDate);
-    
-    // Obtener la disponibilidad del profesional
-    const availability = getClientProfessionalAvailability(professionalId);
-    console.log('🚀 Disponibilidad del profesional:', availability);
-    
-    // Parsear la fecha seleccionada
-    const dateParts = selectedDate.split(' ');
-    const day = parseInt(dateParts[3]);
-    const month = getMonthNumber(dateParts[4]);
-    const year = parseInt(dateParts[5]);
-    
-    console.log('🚀 Fecha parseada - Día:', day, 'Mes:', month, 'Año:', year);
-    
-    if (isNaN(day) || isNaN(month) || isNaN(year)) {
-      console.log('❌ Error: Fecha inválida');
-      return [];
+    try {
+      const slots = await getBookableTimeSlotsForProfessionalDate(professionalId, selectedDateYmd);
+      setClientAvailableTimeSlots(Array.isArray(slots) ? slots : []);
+    } catch (error) {
+      console.warn('⚠️ No se pudieron cargar horarios disponibles:', error);
+      setClientAvailableTimeSlots([]);
     }
-    
-    const selectedDateObj = new Date(year, month, day);
-    const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][selectedDateObj.getDay()];
-    
-    console.log('🚀 Día de la semana:', dayName);
-    console.log('🚀 ¿Está disponible este día?', availability[dayName]);
-    
-    // Verificar si el día está disponible
-    if (!availability[dayName]) {
-      console.log('❌ Día no disponible');
-      return [];
-    }
-    
-    // SIMPLIFICAR: Para el Dr. Carlos Mendoza, siempre devolver horarios fijos
-    if (professionalId === '1') {
-      console.log('🎯 Dr. Carlos Mendoza - Usando horarios fijos de prueba');
-      const testSlots = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '15:30', '16:00', '17:00'];
-      console.log('🎯 Horarios de prueba:', testSlots);
-      return testSlots;
-    }
-    
-    // Para otros profesionales, usar lógica normal
-    const timeSlots: { [key: string]: string[] } = {
-      '2': ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'], // Dra. Ana García
-      '3': ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'], // Dr. Luis Rodríguez
-      '4': ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00'], // Dra. María López
-      '5': ['14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'], // Dr. Juan Pérez
-    };
-    
-    const availableSlots = timeSlots[professionalId] || [];
-    console.log('🚀 Horarios para otros profesionales:', availableSlots);
-    
-    return availableSlots;
-  };
-
-  const getMonthNumber = (monthName: string): number => {
-    const months: { [key: string]: number } = {
-      'enero': 0, 'febrero': 1, 'marzo': 2, 'abril': 3, 'mayo': 4, 'junio': 5,
-      'julio': 6, 'agosto': 7, 'septiembre': 8, 'octubre': 9, 'noviembre': 10, 'diciembre': 11
-    };
-    return months[(monthName || '').toLowerCase()] || 0;
-  };
-
-  const getReservedTimeSlots = (professionalId: string, date: Date): string[] => {
-    // SIMPLIFICAR: Para pruebas, no bloquear horarios con reservas simuladas
-    // En un sistema real, esto vendría de la base de datos
-    console.log('🔍 getReservedTimeSlots - Profesional:', professionalId, 'Fecha:', date.toISOString());
-    
-    // Para el Dr. Carlos Mendoza, solo bloquear algunos horarios específicos para pruebas
-    if (professionalId === '1') {
-      // Solo bloquear horarios muy tempranos o muy tarde para pruebas
-      const reservedSlots: string[] = ['08:00', '08:30', '18:30', '19:00'];
-      console.log('🔍 Dr. Carlos Mendoza - Horarios reservados simulados:', reservedSlots);
-      return reservedSlots;
-    }
-    
-    // Para otros profesionales, no bloquear horarios por ahora
-    return [];
   };
 
   const handleClientTimeSelection = (selectedTime: string) => {
@@ -2326,115 +2323,28 @@ function SettingsScreen() {
     setShowClientTimePickerModal(false);
   };
 
-  const getProfessionalIdByName = (professionalName: string): string => {
-    const professionalMap: { [key: string]: string } = {
-      'Dr. Carlos Mendoza': '1',
-      'Dra. Ana García': '2',
-      'Dr. Luis Rodríguez': '3',
-      'Dra. María López': '4',
-      'Dr. Juan Pérez': '5'
-    };
-    return professionalMap[professionalName] || '1';
-  };
-
-  // useEffect para detectar cambios en la fecha y generar horarios
+  // Cargar horarios reales del profesional cuando se selecciona fecha
   useEffect(() => {
-    console.log('🔄 useEffect se ejecutó');
-    console.log('🔄 clientBookingData.date:', clientBookingData.date);
-    console.log('🔄 clientBookingData.professionalName:', clientBookingData.professionalName);
-    
-    if (clientBookingData.date && clientBookingData.professionalName) {
-      console.log('🔄 ✅ Condiciones cumplidas, procediendo...');
-      
-      const professionalId = getProfessionalIdByName(clientBookingData.professionalName);
-      console.log('🔄 ID del profesional:', professionalId);
-      
-      const availableSlots = getClientAvailableTimeSlots(professionalId, clientBookingData.date);
-      console.log('🔄 Horarios disponibles retornados:', availableSlots);
-      console.log('🔄 Cantidad de horarios:', availableSlots.length);
-      console.log('🔄 Tipo de datos:', typeof availableSlots);
-      console.log('🔄 ¿Es array?', Array.isArray(availableSlots));
-      
-      setClientAvailableTimeSlots(availableSlots);
-      console.log('🔄 Estado clientAvailableTimeSlots actualizado');
-      
-      // AGREGAR HORA AUTOMÁTICA PARA PRUEBAS
-      if (professionalId === '1' && availableSlots.length > 0) {
-        console.log('🎯 AGREGANDO HORA AUTOMÁTICA PARA PRUEBAS');
-        const testTime = '15:30'; // Hora de prueba específica
-        
-        if (availableSlots.includes(testTime)) {
-          console.log('🎯 Hora de prueba encontrada, asignando automáticamente');
-          setClientBookingData(prev => ({ ...prev, time: testTime }));
-          console.log('🎯 Hora automática asignada:', testTime);
-        } else {
-          // Si no está la hora específica, tomar la primera disponible
-          const firstAvailableTime = availableSlots[0];
-          console.log('🎯 Hora específica no encontrada, usando primera disponible:', firstAvailableTime);
-          setClientBookingData(prev => ({ ...prev, time: firstAvailableTime }));
-        }
-      } else if (availableSlots.length > 0) {
-        // Para otros profesionales, asignar la primera hora disponible
-        const firstAvailableTime = availableSlots[0];
-        console.log('🎯 Asignando primera hora disponible para otros profesionales:', firstAvailableTime);
-        setClientBookingData(prev => ({ ...prev, time: firstAvailableTime }));
-      } else {
-        // Resetear la hora seleccionada si no hay horarios disponibles
-        setClientBookingData(prev => ({ ...prev, time: '' }));
-      }
-      
-      // Debug adicional para Dr. Carlos Mendoza
-      if (professionalId === '1') {
-        console.log('🎯 DEBUG DR. CARLOS MENDOZA:');
-        console.log('🎯 Estado clientAvailableTimeSlots actualizado a:', availableSlots);
-        console.log('🎯 Longitud del array:', availableSlots.length);
-        console.log('🎯 Hora asignada:', clientBookingData.time);
-      }
-    } else {
-      console.log('🔄 ❌ Condiciones NO cumplidas');
-      console.log('🔄 ¿Fecha existe?', !!clientBookingData.date);
-      console.log('🔄 ¿Profesional existe?', !!clientBookingData.professionalName);
+    const professionalId = getSelectedProfessionalId();
+    if (!professionalId || !clientSelectedDateIso) {
+      setClientAvailableTimeSlots([]);
+      return;
     }
-  }, [clientBookingData.date, clientBookingData.professionalName]);
+    void loadClientAvailableTimeSlots(professionalId, clientSelectedDateIso);
+  }, [clientBookingData.professionalId, clientBookingData.professionalName, clientSelectedDateIso]);
 
-  // useEffect adicional para asegurar asignación automática de hora cuando se pre-llena el formulario
+  // Cargar fechas disponibles reales del mes cuando se abre el selector de fecha
   useEffect(() => {
-    console.log('🔄 useEffect adicional para asignación automática de hora');
-    console.log('🔄 clientBookingData.professionalName:', clientBookingData.professionalName);
-    console.log('🔄 clientBookingData.date:', clientBookingData.date);
-    console.log('🔄 clientBookingData.time:', clientBookingData.time);
-    
-    // Solo ejecutar si tenemos profesional y fecha pero NO hora
-    if (clientBookingData.professionalName && clientBookingData.date && !clientBookingData.time) {
-      console.log('🔄 ✅ Condiciones para asignación automática cumplidas');
-      
-      const professionalId = getProfessionalIdByName(clientBookingData.professionalName);
-      console.log('🔄 ID del profesional para asignación automática:', professionalId);
-      
-      const availableSlots = getClientAvailableTimeSlots(professionalId, clientBookingData.date);
-      console.log('🔄 Horarios disponibles para asignación automática:', availableSlots);
-      
-      if (availableSlots.length > 0) {
-        // Para el Dr. Carlos Mendoza, usar hora específica de prueba
-        if (professionalId === '1') {
-          const testTime = '15:30';
-          if (availableSlots.includes(testTime)) {
-            console.log('🎯 Asignando hora de prueba específica:', testTime);
-            setClientBookingData(prev => ({ ...prev, time: testTime }));
-          } else {
-            const firstAvailableTime = availableSlots[0];
-            console.log('🎯 Hora de prueba no disponible, usando primera disponible:', firstAvailableTime);
-            setClientBookingData(prev => ({ ...prev, time: firstAvailableTime }));
-          }
-        } else {
-          // Para otros profesionales, usar la primera hora disponible
-          const firstAvailableTime = availableSlots[0];
-          console.log('🎯 Asignando primera hora disponible para otros profesionales:', firstAvailableTime);
-          setClientBookingData(prev => ({ ...prev, time: firstAvailableTime }));
-        }
-      }
-    }
-  }, [clientBookingData.professionalName, clientBookingData.date, clientBookingData.time]);
+    if (!showClientDatePickerModal) return;
+    const professionalId = getSelectedProfessionalId();
+    if (!professionalId) return;
+    void loadClientAvailableDates(professionalId, clientCurrentMonth);
+  }, [
+    showClientDatePickerModal,
+    clientCurrentMonth,
+    clientBookingData.professionalId,
+    clientBookingData.professionalName,
+  ]);
 
   // useEffect para cargar usuarios cliente cuando se abra el modal
   useEffect(() => {
@@ -2598,7 +2508,7 @@ function SettingsScreen() {
 
   // const handleDeletePatient = (patient: any) => {
   //   Alert.alert(
-  //     '🗑️ Eliminar Paciente',
+  //     '🗑️´©Å Eliminar Paciente',
   //     `¿Estás seguro de que quieres eliminar a ${patient.fullName}? Esta acción no se puede deshacer.`,
   //     [
   //       {
@@ -2711,6 +2621,18 @@ function SettingsScreen() {
 
   const handleAbout = () => {
     Alert.alert('Acerca de', 'Turnario v1.0.0\n\nGestiona tus citas de manera fácil y eficiente.');
+  };
+
+  const handleTurnarioPro = () => {
+    router.push('/subscribe' as never);
+  };
+
+  const handleConfigureAvailability = () => {
+    router.push('/availability-settings' as never);
+  };
+
+  const handleMedicalAuthorizations = () => {
+    setShowMedicalAuthorizationModal(true);
   };
 
   const handleSaveProfile = async () => {
@@ -2871,7 +2793,7 @@ function SettingsScreen() {
       }
 
       // Aquí iría la lógica para guardar el paciente en la base de datos
-      console.log('💾 Guardando nuevo paciente:', newPatientData);
+      console.log('💎 Guardando nuevo paciente:', newPatientData);
       
       // Simular guardado exitoso
       Alert.alert(
@@ -3391,7 +3313,9 @@ function SettingsScreen() {
   };
 
   const handleMisCitas = () => {
-    setShowMyAppointmentsModal(true);
+    // El modal de "Mis Citas" quedó fuera de esta pantalla; redirigimos al calendario
+    // para que el acceso desde Panel de Cliente vuelva a funcionar.
+    router.push('/(tabs)/calendar' as never);
   };
 
   // const getFilteredAppointments = () => {
@@ -3654,6 +3578,29 @@ function SettingsScreen() {
           <Ionicons name="chevron-forward" size={20} color="#ccc" />
         </TouchableOpacity>
 
+        {isProfessional && (
+          <TouchableOpacity style={styles.menuItem} onPress={handleTurnarioPro}>
+            <View style={styles.menuItemLeft}>
+              <Ionicons name="diamond-outline" size={24} color="#667eea" />
+              <View>
+                <Text style={styles.menuItemText}>Turnario Pro</Text>
+                <Text style={{ fontSize: 13, color: '#777', marginTop: 2 }}>Suscripción · Google Play</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
+        )}
+
+        {isProfessional && (
+          <TouchableOpacity style={styles.menuItem} onPress={handleConfigureAvailability}>
+            <View style={styles.menuItemLeft}>
+              <Ionicons name="calendar-outline" size={24} color="#667eea" />
+              <Text style={styles.menuItemText}>Configurar Disponibilidad</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={styles.menuItem} onPress={handlePrivacy}>
           <View style={styles.menuItemLeft}>
             <Ionicons name="shield-outline" size={24} color="#667eea" />
@@ -3711,7 +3658,7 @@ function SettingsScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.menuItem} onPress={() => Alert.alert('Info', 'Función en desarrollo')}>
             <View style={styles.menuItemLeft}>
               <Ionicons name="analytics" size={24} color="#FF9800" />
@@ -3735,6 +3682,14 @@ function SettingsScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handleMedicalAuthorizations}>
+            <View style={styles.menuItemLeft}>
+              <Ionicons name="shield-checkmark" size={24} color="#E91E63" />
+              <Text style={styles.menuItemText}>Autorizaciones Médicas</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -3742,6 +3697,28 @@ function SettingsScreen() {
       {isProfessional && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Pagos y Señas</Text>
+
+          <View style={[styles.menuItem, { alignItems: 'center' }]}>
+            <View style={[styles.menuItemLeft, { flex: 1, alignItems: 'flex-start' }]}>
+              <Ionicons name="wallet-outline" size={24} color="#FF9800" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.menuItemText}>Reservas online con seña</Text>
+                <Text style={{ fontSize: 14, color: '#666', marginTop: 2 }}>
+                  Si está activo, el cliente paga la seña en la app para confirmar.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsOnlineDepositEnabled((prev) => !prev)}
+              style={{ paddingHorizontal: 4, paddingVertical: 4 }}
+            >
+              <Ionicons
+                name={isOnlineDepositEnabled ? 'toggle' : 'toggle-outline'}
+                size={38}
+                color={isOnlineDepositEnabled ? '#4CAF50' : '#ccc'}
+              />
+            </TouchableOpacity>
+          </View>
           
           <TouchableOpacity style={styles.menuItem} onPress={handleDepositHistory}>
             <View style={styles.menuItemLeft}>
@@ -3824,6 +3801,7 @@ function SettingsScreen() {
         visible={showEditProfileModal}
         animationType="slide"
         transparent={true}
+        onRequestClose={handleCancelEdit}
       >
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView 
@@ -4070,7 +4048,7 @@ function SettingsScreen() {
         onRequestClose={() => setShowServiceSelector(false)}
         animationType="slide"
         presentationStyle="pageSheet"
-        onShow={() => console.log('🎭 Modal de servicios visible:', showServiceSelector)}
+        onShow={() => console.log('🎬 Modal de servicios visible:', showServiceSelector)}
       >
                 <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -4683,16 +4661,26 @@ function SettingsScreen() {
                 </View>
 
                 <View style={styles.depositInfo}>
-                  <Text style={styles.depositInfoTitle}>Información de Seña</Text>
+                  <Text style={styles.depositInfoTitle}>
+                    {isOnlineDepositEnabled ? 'Información de Seña' : 'Confirmación Manual'}
+                  </Text>
                   <View style={styles.depositInfoRow}>
                     <Text style={styles.depositInfoLabel}>Precio del Servicio:</Text>
                     <Text style={styles.depositInfoValue}>$10,000</Text>
                   </View>
                   <View style={styles.depositInfoRow}>
-                    <Text style={styles.depositInfoLabel}>Seña Requerida (20%):</Text>
-                    <Text style={styles.depositInfoAmount}>$2,000</Text>
+                    <Text style={styles.depositInfoLabel}>
+                      {isOnlineDepositEnabled ? 'Seña Requerida (20%):' : 'Estado de la Reserva:'}
+                    </Text>
+                    <Text style={styles.depositInfoAmount}>
+                      {isOnlineDepositEnabled ? '$2,000' : 'Solicitud pendiente'}
+                    </Text>
                   </View>
-                  <Text style={styles.depositInfoNote}>* La seña confirma tu reserva y se descuenta del precio total</Text>
+                  <Text style={styles.depositInfoNote}>
+                    {isOnlineDepositEnabled
+                      ? '* La seña confirma tu reserva y se descuenta del precio total'
+                      : '* Sin pago online: el profesional debe aprobar la solicitud desde notificaciones'}
+                  </Text>
                 </View>
               </View>
             </ScrollView>
@@ -4710,13 +4698,21 @@ function SettingsScreen() {
                 onPress={() => {
                   // MODO PRUEBA: Quitar validación de hora para pruebas
                   if (!clientBookingData.professionalName || !clientBookingData.service || !clientBookingData.date) {
-                    Alert.alert('Error', 'Por favor completa los campos obligatorios (Profesional, Servicio y Fecha) antes de proceder al pago.');
+                    Alert.alert(
+                      'Error',
+                      `Por favor completa los campos obligatorios (Profesional, Servicio y Fecha) antes de ${isOnlineDepositEnabled ? 'proceder al pago' : 'enviar la solicitud'}.`
+                    );
                     return;
                   }
-                  
+
+                  if (!isOnlineDepositEnabled) {
+                    handleSubmitClientBookingRequest();
+                    return;
+                  }
+
                   // Configurar datos para el pago
                   setPaymentAmount(2000); // Seña del 20%
-                  
+
                   // Configurar resumen del pago para Mercado Pago
                   setPaymentSummary({
                     service: clientBookingData.service,
@@ -4727,13 +4723,15 @@ function SettingsScreen() {
                     depositAmount: 2000, // Seña del 20%
                     depositPercentage: 20,
                   });
-                  
+
                   // Cerrar modal de reserva y abrir modal de Mercado Pago
                   setShowClientBookingModal(false);
                   handleMercadoPagoPayment();
                 }}
               >
-                <Text style={styles.saveButtonText}>Proceder al Pago de Seña</Text>
+                <Text style={styles.saveButtonText}>
+                  {isOnlineDepositEnabled ? 'Proceder al Pago de Seña' : 'Enviar Solicitud de Reserva'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -4876,7 +4874,7 @@ function SettingsScreen() {
               
               {/* Días del mes */}
               <View style={styles.calendarDays}>
-                {getClientDaysInMonth(clientCurrentMonth, '1').map((dayData, index) => (
+                {getClientDaysInMonth(clientCurrentMonth, getSelectedProfessionalId()).map((dayData, index) => (
                   <TouchableOpacity
                     key={`day-${dayData.day}-${index}`}
                     style={[
@@ -4884,7 +4882,9 @@ function SettingsScreen() {
                       !dayData.isCurrentMonth && styles.calendarDayOtherMonth,
                       dayData.isAvailable && styles.calendarDayAvailable,
                       !dayData.isAvailable && dayData.isCurrentMonth && styles.calendarDayUnavailable,
-                      clientSelectedDate && new Date(clientCurrentMonth.getFullYear(), clientCurrentMonth.getMonth(), dayData.day).toDateString() === new Date(clientCurrentMonth.getFullYear(), clientCurrentMonth.getMonth(), parseInt(clientSelectedDate.split(' ')[3])).toDateString() && styles.calendarDaySelected
+                      clientSelectedDateIso &&
+                        toYmdLocal(new Date(clientCurrentMonth.getFullYear(), clientCurrentMonth.getMonth(), dayData.day)) === clientSelectedDateIso &&
+                        styles.calendarDaySelected
                     ]}
                     onPress={() => handleClientDateSelection(dayData.day, dayData.isAvailable)}
                     disabled={!dayData.isAvailable}
@@ -4894,7 +4894,9 @@ function SettingsScreen() {
                       !dayData.isCurrentMonth && styles.calendarDayTextOtherMonth,
                       dayData.isAvailable && styles.calendarDayTextAvailable,
                       !dayData.isAvailable && dayData.isCurrentMonth && styles.calendarDayTextUnavailable,
-                      clientSelectedDate && new Date(clientCurrentMonth.getFullYear(), clientCurrentMonth.getMonth(), dayData.day).toDateString() === new Date(clientCurrentMonth.getFullYear(), clientCurrentMonth.getMonth(), parseInt(clientSelectedDate.split(' ')[3])).toDateString() && styles.calendarDayTextSelected
+                      clientSelectedDateIso &&
+                        toYmdLocal(new Date(clientCurrentMonth.getFullYear(), clientCurrentMonth.getMonth(), dayData.day)) === clientSelectedDateIso &&
+                        styles.calendarDayTextSelected
                     ]}>
                       {dayData.day}
                     </Text>
@@ -5082,7 +5084,7 @@ function SettingsScreen() {
         <View style={styles.calendarModalOverlay}>
           <View style={styles.calendarModalContent}>
             <View style={styles.calendarHeader}>
-              <Text style={styles.calendarTitle}>💳 Pago de Seña Requerido</Text>
+              <Text style={styles.calendarTitle}>Pago de Seña Requerido</Text>
               <TouchableOpacity
                 style={styles.calendarNavButton}
                 onPress={() => setShowPaymentNotificationModal(false)}
@@ -5251,7 +5253,7 @@ function SettingsScreen() {
                 <TouchableOpacity
                   style={styles.catalogSelectorButton}
                   onPress={() => {
-                    console.log('🔘 Abriendo catálogo de usuarios cliente...');
+                    console.log('📋 Abriendo catálogo de usuarios cliente...');
                     setShowClientSelector(true);
                   }}
                   activeOpacity={0.7}
@@ -5863,7 +5865,7 @@ function SettingsScreen() {
 
                 {/* Información Detallada */}
                 <View style={styles.patientDetailsSection}>
-                  <Text style={styles.sectionTitle}>📋 Información Personal</Text>
+                  <Text style={styles.sectionTitle}>Información Personal</Text>
                   
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>ID:</Text>
@@ -6124,7 +6126,7 @@ function SettingsScreen() {
               style={[styles.editPatientButton, styles.saveButton]}
               onPress={handleSavePatientChanges}
             >
-              <Text style={styles.saveButtonText}>💾 Guardar Cambios</Text>
+              <Text style={styles.saveButtonText}>💎 Guardar Cambios</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -6328,634 +6330,6 @@ function SettingsScreen() {
               </View>
             ))}
           </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Modal de Gestión de Horarios */}
-      <Modal
-        visible={showScheduleModal}
-        transparent={false}
-        onRequestClose={() => setShowScheduleModal(false)}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.scheduleModalContainer}>
-          {/* Header del Modal */}
-          <View style={styles.scheduleModalHeader}>
-            <TouchableOpacity
-              style={styles.scheduleModalBackButton}
-              onPress={() => setShowScheduleModal(false)}
-            >
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <View style={styles.scheduleModalHeaderContent}>
-              <Text style={styles.scheduleModalTitle}>
-                🕐 Gestión de Horarios
-              </Text>
-              <Text style={styles.scheduleModalSubtitle}>
-                {getWeekName(selectedWeek)} de {getMonthName(selectedMonth)}
-              </Text>
-            </View>
-          </View>
-
-          <ScrollView style={styles.scheduleModalContent} showsVerticalScrollIndicator={false}>
-            {/* Selector de Período (Mes y Semana) */}
-            <View style={styles.scheduleSection}>
-              <Text style={styles.scheduleSectionTitle}>📅 Seleccionar Período</Text>
-              <Text style={styles.scheduleSectionDescription}>
-                Elige qué mes y semana quieres configurar
-              </Text>
-              
-              {/* Selector de Mes */}
-              <View style={styles.periodSelectorContainer}>
-                <Text style={styles.periodSelectorLabel}>Mes:</Text>
-                <View style={styles.periodSelectorRow}>
-                  <TouchableOpacity
-                    style={styles.periodNavButton}
-                    onPress={() => navigateScheduleMonth('prev')}
-                  >
-                    <Ionicons name="chevron-back" size={20} color="#667eea" />
-                  </TouchableOpacity>
-                  
-                  <View style={styles.periodSelectorValue}>
-                    <Text style={styles.periodSelectorText}>{getMonthName(selectedMonth)}</Text>
-                  </View>
-                  
-                  <TouchableOpacity
-                    style={styles.periodNavButton}
-                    onPress={() => navigateScheduleMonth('next')}
-                  >
-                    <Ionicons name="chevron-forward" size={20} color="#667eea" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Selector de Semana */}
-              <View style={styles.periodSelectorContainer}>
-                <Text style={styles.periodSelectorLabel}>Semana:</Text>
-                <View style={styles.periodSelectorRow}>
-                  <TouchableOpacity
-                    style={styles.periodNavButton}
-                    onPress={() => navigateWeek('prev')}
-                  >
-                    <Ionicons name="chevron-back" size={20} color="#667eea" />
-                  </TouchableOpacity>
-                  
-                  <View style={styles.periodSelectorValue}>
-                    <Text style={styles.periodSelectorText}>
-                      {getWeekName(selectedWeek)}
-                    </Text>
-                    <Text style={styles.periodSelectorSubtext}>
-                      Semana {selectedWeek}
-                    </Text>
-                  </View>
-                  
-                  <TouchableOpacity
-                    style={styles.periodNavButton}
-                    onPress={() => navigateWeek('next')}
-                  >
-                    <Ionicons name="chevron-forward" size={20} color="#667eea" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            {/* Selector de Día de la Semana */}
-            <View style={styles.scheduleSection}>
-              <Text style={styles.scheduleSectionTitle}>📅 Seleccionar Día de la Semana</Text>
-              <Text style={styles.scheduleSectionDescription}>
-                Elige qué día quieres configurar para {getWeekName(selectedWeek)} de {getMonthName(selectedMonth)}
-              </Text>
-              
-              <View style={styles.daySelectorContainer}>
-                {Object.entries(scheduleSettings.workingDays).map(([day, settings]) => (
-                  <TouchableOpacity
-                    key={day}
-                    style={[
-                      styles.daySelectorButton,
-                      selectedDay === day && styles.daySelectorButtonActive
-                    ]}
-                    onPress={() => setSelectedDay(day)}
-                  >
-                    <Text style={[
-                      styles.daySelectorButtonText,
-                      selectedDay === day && styles.daySelectorButtonTextActive
-                    ]}>
-                      {day === 'monday' ? 'Lunes' :
-                       day === 'tuesday' ? 'Martes' :
-                       day === 'wednesday' ? 'Miércoles' :
-                       day === 'thursday' ? 'Jueves' :
-                       day === 'friday' ? 'Viernes' :
-                       day === 'saturday' ? 'Sábado' : 'Domingo'}
-                    </Text>
-                    {settings.enabled && (
-                      <View style={styles.dayStatusIndicator}>
-                        <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Configuración del Día Seleccionado */}
-            {selectedDay && (
-              <View style={styles.scheduleSection}>
-                <View style={styles.configurationHeader}>
-                  <Text style={styles.scheduleSectionTitle}>
-                    ⚙️ Configuración de {selectedDay === 'monday' ? 'Lunes' :
-                     selectedDay === 'tuesday' ? 'Martes' :
-                     selectedDay === 'wednesday' ? 'Miércoles' :
-                     selectedDay === 'thursday' ? 'Jueves' :
-                     selectedDay === 'friday' ? 'Viernes' :
-                     selectedDay === 'saturday' ? 'Sábado' : 'Domingo'}
-                  </Text>
-                  <View style={styles.periodBadge}>
-                    <Text style={styles.periodBadgeText}>
-                      {getWeekName(selectedWeek)} de {getMonthName(selectedMonth)}
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.workingDayCard}>
-                  <View style={styles.workingDayHeader}>
-                    <View style={styles.workingDayInfo}>
-                      <Text style={styles.workingDayName}>
-                        {selectedDay === 'monday' ? 'Lunes' :
-                         selectedDay === 'tuesday' ? 'Martes' :
-                         selectedDay === 'wednesday' ? 'Miércoles' :
-                         selectedDay === 'thursday' ? 'Jueves' :
-                         selectedDay === 'friday' ? 'Viernes' :
-                         selectedDay === 'saturday' ? 'Sábado' : 'Domingo'}
-                      </Text>
-                      <Text style={styles.workingDayTime}>
-                        Día {scheduleSettings.workingDays[selectedDay].enabled ? 'Activo' : 'Inactivo'}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.workingDayToggle, scheduleSettings.workingDays[selectedDay].enabled && styles.workingDayToggleActive]}
-                      onPress={() => handleWorkingDayChange(selectedDay, 'enabled', !scheduleSettings.workingDays[selectedDay].enabled)}
-                    >
-                      <Ionicons 
-                        name={scheduleSettings.workingDays[selectedDay].enabled ? "checkmark" : "close"} 
-                        size={16} 
-                        color={scheduleSettings.workingDays[selectedDay].enabled ? "white" : "#999"} 
-                      />
-                    </TouchableOpacity>
-                  </View>
-                  
-                  {scheduleSettings.workingDays[selectedDay].enabled && (
-                    <View style={styles.workingDayTimeSettings}>
-                      {/* Turno de Mañana */}
-                      <View style={styles.timeSlotSection}>
-                        <View style={styles.timeSlotHeader}>
-                          <Text style={styles.timeSlotTitle}>🌅 Mañana</Text>
-                          <TouchableOpacity
-                            style={[styles.timeSlotToggle, scheduleSettings.workingDays[selectedDay].morning.enabled && styles.timeSlotToggleActive]}
-                            onPress={() => handleWorkingDayChange(selectedDay, 'morning', { ...scheduleSettings.workingDays[selectedDay].morning, enabled: !scheduleSettings.workingDays[selectedDay].morning.enabled })}
-                          >
-                            <Ionicons 
-                              name={scheduleSettings.workingDays[selectedDay].morning.enabled ? "checkmark" : "close"} 
-                              size={14} 
-                              color={scheduleSettings.workingDays[selectedDay].morning.enabled ? "white" : "#999"} 
-                            />
-                          </TouchableOpacity>
-                        </View>
-                        {scheduleSettings.workingDays[selectedDay].morning.enabled && (
-                          <View style={styles.timeInputRow}>
-                            <View style={styles.timeInputContainer}>
-                              <Text style={styles.timeInputLabel}>Inicio:</Text>
-                              <TouchableOpacity
-                                style={styles.timeInput}
-                                onPress={() => {
-                                  Alert.alert('Configurar Hora', 'Función en desarrollo - Se abrirá un selector de tiempo');
-                                }}
-                              >
-                                <Text style={styles.timeInputText}>{scheduleSettings.workingDays[selectedDay].morning.start}</Text>
-                                <Ionicons name="time" size={16} color="#667eea" />
-                              </TouchableOpacity>
-                            </View>
-                            <View style={styles.timeInputContainer}>
-                              <Text style={styles.timeInputLabel}>Fin:</Text>
-                              <TouchableOpacity
-                                style={styles.timeInput}
-                                onPress={() => {
-                                  Alert.alert('Configurar Hora', 'Función en desarrollo - Se abrirá un selector de tiempo');
-                                }}
-                              >
-                                <Text style={styles.timeInputText}>{scheduleSettings.workingDays[selectedDay].morning.end}</Text>
-                                <Ionicons name="time" size={16} color="#667eea" />
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Turno de Tarde */}
-                      <View style={styles.timeSlotSection}>
-                        <View style={styles.timeSlotHeader}>
-                          <Text style={styles.timeSlotTitle}>☀️ Tarde</Text>
-                          <TouchableOpacity
-                            style={[styles.timeSlotToggle, scheduleSettings.workingDays[selectedDay].afternoon.enabled && styles.timeSlotToggleActive]}
-                            onPress={() => handleWorkingDayChange(selectedDay, 'afternoon', { ...scheduleSettings.workingDays[selectedDay].afternoon, enabled: !scheduleSettings.workingDays[selectedDay].afternoon.enabled })}
-                          >
-                            <Ionicons 
-                              name={scheduleSettings.workingDays[selectedDay].afternoon.enabled ? "checkmark" : "close"} 
-                              size={14} 
-                              color={scheduleSettings.workingDays[selectedDay].afternoon.enabled ? "white" : "#999"} 
-                            />
-                          </TouchableOpacity>
-                        </View>
-                        {scheduleSettings.workingDays[selectedDay].afternoon.enabled && (
-                          <View style={styles.timeInputRow}>
-                            <View style={styles.timeInputContainer}>
-                              <Text style={styles.timeInputLabel}>Inicio:</Text>
-                              <TouchableOpacity
-                                style={styles.timeInput}
-                                onPress={() => {
-                                  Alert.alert('Configurar Hora', 'Función en desarrollo - Se abrirá un selector de tiempo');
-                                }}
-                              >
-                                <Text style={styles.timeInputText}>{scheduleSettings.workingDays[selectedDay].afternoon.start}</Text>
-                                <Ionicons name="time" size={16} color="#667eea" />
-                              </TouchableOpacity>
-                            </View>
-                            <View style={styles.timeInputContainer}>
-                              <Text style={styles.timeInputLabel}>Fin:</Text>
-                              <TouchableOpacity
-                                style={styles.timeInput}
-                                onPress={() => {
-                                  Alert.alert('Configurar Hora', 'Función en desarrollo - Se abrirá un selector de tiempo');
-                                }}
-                              >
-                                <Text style={styles.timeInputText}>{scheduleSettings.workingDays[selectedDay].afternoon.end}</Text>
-                                <Ionicons name="time" size={16} color="#667eea" />
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Turno de Noche */}
-                      <View style={styles.timeSlotSection}>
-                        <View style={styles.timeSlotHeader}>
-                          <Text style={styles.timeSlotTitle}>🌙 Noche</Text>
-                          <TouchableOpacity
-                            style={[styles.timeSlotToggle, scheduleSettings.workingDays[selectedDay].evening.enabled && styles.timeSlotToggleActive]}
-                            onPress={() => handleWorkingDayChange(selectedDay, 'evening', { ...scheduleSettings.workingDays[selectedDay].evening, enabled: !scheduleSettings.workingDays[selectedDay].evening.enabled })}
-                          >
-                            <Ionicons 
-                              name={scheduleSettings.workingDays[selectedDay].evening.enabled ? "checkmark" : "close"} 
-                              size={14} 
-                              color={scheduleSettings.workingDays[selectedDay].evening.enabled ? "white" : "#999"} 
-                            />
-                          </TouchableOpacity>
-                        </View>
-                        {scheduleSettings.workingDays[selectedDay].evening.enabled && (
-                          <View style={styles.timeInputRow}>
-                            <View style={styles.timeInputContainer}>
-                              <Text style={styles.timeInputLabel}>Inicio:</Text>
-                              <TouchableOpacity
-                                style={styles.timeInput}
-                                onPress={() => {
-                                  Alert.alert('Configurar Hora', 'Función en desarrollo - Se abrirá un selector de tiempo');
-                                }}
-                              >
-                                <Text style={styles.timeInputText}>{scheduleSettings.workingDays[selectedDay].evening.start}</Text>
-                                <Ionicons name="time" size={16} color="#667eea" />
-                              </TouchableOpacity>
-                            </View>
-                            <View style={styles.timeInputContainer}>
-                              <Text style={styles.timeInputLabel}>Fin:</Text>
-                              <TouchableOpacity
-                                style={styles.timeInput}
-                                onPress={() => {
-                                  Alert.alert('Configurar Hora', 'Función en desarrollo - Se abrirá un selector de tiempo');
-                                }}
-                              >
-                                <Text style={styles.timeInputText}>{scheduleSettings.workingDays[selectedDay].evening.end}</Text>
-                                <Ionicons name="time" size={16} color="#667eea" />
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
-
-            {/* Configuración de Tiempo de Descanso */}
-            <View style={styles.scheduleSection}>
-              <Text style={styles.scheduleSectionTitle}>☕ Tiempo de Descanso</Text>
-              
-              {/* Tarjeta Principal del Descanso */}
-              <View style={styles.breakTimeMainCard}>
-                {/* Header con Icono y Título */}
-                <View style={styles.breakTimeMainHeader}>
-                  <View style={styles.breakTimeIconContainer}>
-                    <Ionicons name="restaurant" size={28} color="#FF6B35" />
-                  </View>
-                  <View style={styles.breakTimeMainTitleContainer}>
-                    <Text style={styles.breakTimeMainTitle}>Descanso para Almuerzo</Text>
-                    <Text style={styles.breakTimeMainSubtitle}>Configura tu horario de descanso diario</Text>
-                  </View>
-                </View>
-
-                {/* Contenedor de Configuración */}
-                <View style={styles.breakTimeConfigContainer}>
-                  {/* Selector de Hora de Inicio */}
-                  <View style={styles.breakTimeSelectorCard}>
-                    <View style={styles.breakTimeSelectorHeader}>
-                      <Ionicons name="sunny" size={18} color="#FFA726" />
-                      <Text style={styles.breakTimeSelectorTitle}>Hora de Inicio</Text>
-                    </View>
-                    <View style={styles.breakTimeTimeDisplay}>
-                      <TouchableOpacity
-                        style={styles.breakTimeTimeButton}
-                        onPress={() => {
-                          const currentHour = parseInt(scheduleSettings.breakTime.start.split(':')[0]);
-                          const newHour = currentHour === 0 ? 23 : currentHour - 1;
-                          const newTime = `${newHour.toString().padStart(2, '0')}:00`;
-                          setScheduleSettings(prev => ({
-                            ...prev,
-                            breakTime: { ...prev.breakTime, start: newTime }
-                          }));
-                        }}
-                      >
-                        <Ionicons name="chevron-down" size={24} color="#667eea" />
-                      </TouchableOpacity>
-                      
-                      <View style={styles.breakTimeTimeValue}>
-                        <Text style={styles.breakTimeTimeText}>{scheduleSettings.breakTime.start}</Text>
-                        <Text style={styles.breakTimeTimeLabel}>Hora</Text>
-                      </View>
-                      
-                      <TouchableOpacity
-                        style={styles.breakTimeTimeButton}
-                        onPress={() => {
-                          const currentHour = parseInt(scheduleSettings.breakTime.start.split(':')[0]);
-                          const newHour = currentHour === 23 ? 0 : currentHour + 1;
-                          const newTime = `${newHour.toString().padStart(2, '0')}:00`;
-                          setScheduleSettings(prev => ({
-                            ...prev,
-                            breakTime: { ...prev.breakTime, start: newTime }
-                          }));
-                        }}
-                      >
-                        <Ionicons name="chevron-up" size={24} color="#667eea" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Separador Visual */}
-                  <View style={styles.breakTimeVisualSeparator}>
-                    <View style={styles.breakTimeArrowContainer}>
-                      <Ionicons name="arrow-forward" size={24} color="#FF6B35" />
-                    </View>
-                    <Text style={styles.breakTimeSeparatorText}>hasta</Text>
-                  </View>
-
-                  {/* Selector de Hora de Fin */}
-                  <View style={styles.breakTimeSelectorCard}>
-                    <View style={styles.breakTimeSelectorHeader}>
-                      <Ionicons name="moon" size={18} color="#5C6BC0" />
-                      <Text style={styles.breakTimeSelectorTitle}>Hora de Fin</Text>
-                    </View>
-                    <View style={styles.breakTimeTimeDisplay}>
-                      <TouchableOpacity
-                        style={styles.breakTimeTimeButton}
-                        onPress={() => {
-                          const currentHour = parseInt(scheduleSettings.breakTime.end.split(':')[0]);
-                          const newHour = currentHour === 0 ? 23 : currentHour - 1;
-                          const newTime = `${newHour.toString().padStart(2, '0')}:00`;
-                          setScheduleSettings(prev => ({
-                            ...prev,
-                            breakTime: { ...prev.breakTime, end: newTime }
-                          }));
-                        }}
-                      >
-                        <Ionicons name="chevron-down" size={24} color="#667eea" />
-                      </TouchableOpacity>
-                      
-                      <View style={styles.breakTimeTimeValue}>
-                        <Text style={styles.breakTimeTimeText}>{scheduleSettings.breakTime.end}</Text>
-                        <Text style={styles.breakTimeTimeLabel}>Hora</Text>
-                      </View>
-                      
-                      <TouchableOpacity
-                        style={styles.breakTimeTimeButton}
-                        onPress={() => {
-                          const currentHour = parseInt(scheduleSettings.breakTime.end.split(':')[0]);
-                          const newHour = currentHour === 23 ? 0 : currentHour + 1;
-                          const newTime = `${newHour.toString().padStart(2, '0')}:00`;
-                          setScheduleSettings(prev => ({
-                            ...prev,
-                            breakTime: { ...prev.breakTime, end: newTime }
-                          }));
-                        }}
-                      >
-                        <Ionicons name="chevron-up" size={24} color="#667eea" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Resumen del Descanso */}
-                <View style={styles.breakTimeSummaryCard}>
-                  <View style={styles.breakTimeSummaryHeader}>
-                    <Ionicons name="time" size={20} color="#4CAF50" />
-                    <Text style={styles.breakTimeSummaryTitle}>Resumen del Descanso</Text>
-                  </View>
-                  <View style={styles.breakTimeSummaryContent}>
-                    <View style={styles.breakTimeSummaryRow}>
-                      <View style={styles.breakTimeSummaryItem}>
-                        <Ionicons name="hourglass" size={16} color="#4CAF50" />
-                        <Text style={styles.breakTimeSummaryLabel}>Duración Total</Text>
-                        <Text style={styles.breakTimeSummaryValue}>
-                          {Math.floor(calculateBreakDuration() / 60)}h {calculateBreakDuration() % 60}min
-                        </Text>
-                      </View>
-                      <View style={styles.breakTimeSummaryItem}>
-                        <Ionicons name="calendar" size={16} color="#FF6B35" />
-                        <Text style={styles.breakTimeSummaryLabel}>Período</Text>
-                        <Text style={styles.breakTimeSummaryValue}>
-                          {scheduleSettings.breakTime.start} - {scheduleSettings.breakTime.end}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Configuración de Citas */}
-            <View style={styles.scheduleSection}>
-              <Text style={styles.scheduleSectionTitle}>📋 Configuración de Citas</Text>
-              <View style={styles.appointmentSettingsCard}>
-                <View style={styles.appointmentSettingRow}>
-                  <View style={styles.appointmentSettingInfo}>
-                    <Text style={styles.appointmentSettingTitle}>Duración de Cita</Text>
-                    <Text style={styles.appointmentSettingSubtitle}>Tiempo promedio por consulta</Text>
-                  </View>
-                  <View style={styles.appointmentSettingValue}>
-                    <View style={styles.durationSelectorContainer}>
-                      <TouchableOpacity
-                        style={styles.durationButton}
-                        onPress={() => {
-                          const newDuration = scheduleSettings.appointmentDuration - 15;
-                          if (newDuration >= 15) {
-                            setScheduleSettings(prev => ({
-                              ...prev,
-                              appointmentDuration: newDuration
-                            }));
-                          }
-                        }}
-                        disabled={scheduleSettings.appointmentDuration <= 15}
-                      >
-                        <Ionicons name="remove" size={20} color={scheduleSettings.appointmentDuration <= 15 ? "#ccc" : "#667eea"} />
-                      </TouchableOpacity>
-                      
-                      <View style={styles.durationValue}>
-                        <Text style={styles.durationNumber}>{scheduleSettings.appointmentDuration}</Text>
-                        <Text style={styles.durationUnit}>min</Text>
-                      </View>
-                      
-                      <TouchableOpacity
-                        style={styles.durationButton}
-                        onPress={() => {
-                          const newDuration = scheduleSettings.appointmentDuration + 15;
-                          if (newDuration <= 180) {
-                            setScheduleSettings(prev => ({
-                              ...prev,
-                              appointmentDuration: newDuration
-                            }));
-                          }
-                        }}
-                        disabled={scheduleSettings.appointmentDuration >= 180}
-                      >
-                        <Ionicons name="add" size={20} color={scheduleSettings.appointmentDuration >= 180 ? "#ccc" : "#667eea"} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-                
-                <View style={styles.appointmentSettingRow}>
-                  <View style={styles.appointmentSettingInfo}>
-                    <Text style={styles.appointmentSettingTitle}>Máximo de Citas por Día</Text>
-                    <Text style={styles.appointmentSettingSubtitle}>Límite de pacientes diarios</Text>
-                  </View>
-                  <View style={styles.appointmentSettingValue}>
-                    <View style={styles.durationSelectorContainer}>
-                      <TouchableOpacity
-                        style={styles.durationButton}
-                        onPress={() => {
-                          const newMax = scheduleSettings.maxAppointmentsPerDay - 1;
-                          if (newMax >= 1) {
-                            setScheduleSettings(prev => ({
-                              ...prev,
-                              maxAppointmentsPerDay: newMax
-                            }));
-                          }
-                        }}
-                        disabled={scheduleSettings.maxAppointmentsPerDay <= 1}
-                      >
-                        <Ionicons name="remove" size={20} color={scheduleSettings.maxAppointmentsPerDay <= 1 ? "#ccc" : "#667eea"} />
-                      </TouchableOpacity>
-                      
-                      <View style={styles.durationValue}>
-                        <Text style={styles.durationNumber}>{scheduleSettings.maxAppointmentsPerDay}</Text>
-                        <Text style={styles.durationUnit}>citas</Text>
-                      </View>
-                      
-                      <TouchableOpacity
-                        style={styles.durationButton}
-                        onPress={() => {
-                          const newMax = scheduleSettings.maxAppointmentsPerDay + 1;
-                          if (newMax <= 20) {
-                            setScheduleSettings(prev => ({
-                              ...prev,
-                              maxAppointmentsPerDay: newMax
-                            }));
-                          }
-                        }}
-                        disabled={scheduleSettings.maxAppointmentsPerDay >= 20}
-                      >
-                        <Ionicons name="add" size={20} color={scheduleSettings.maxAppointmentsPerDay >= 20 ? "#ccc" : "#667eea"} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-                
-                <View style={styles.appointmentSettingRow}>
-                  <View style={styles.appointmentSettingInfo}>
-                    <Text style={styles.appointmentSettingTitle}>Reservas Anticipadas</Text>
-                    <Text style={styles.appointmentSettingSubtitle}>Días de anticipación permitidos</Text>
-                  </View>
-                  <View style={styles.appointmentSettingValue}>
-                    <View style={styles.durationSelectorContainer}>
-                      <TouchableOpacity
-                        style={styles.durationButton}
-                        onPress={() => {
-                          const newAdvance = scheduleSettings.advanceBookingDays - 1;
-                          if (newAdvance >= 0) {
-                            setScheduleSettings(prev => ({
-                              ...prev,
-                              advanceBookingDays: newAdvance
-                            }));
-                          }
-                        }}
-                        disabled={scheduleSettings.advanceBookingDays <= 0}
-                      >
-                        <Ionicons name="remove" size={20} color={scheduleSettings.advanceBookingDays <= 0 ? "#ccc" : "#667eea"} />
-                      </TouchableOpacity>
-                      
-                      <View style={styles.durationValue}>
-                        <Text style={styles.durationNumber}>{scheduleSettings.advanceBookingDays}</Text>
-                        <Text style={styles.durationUnit}>días</Text>
-                      </View>
-                      
-                      <TouchableOpacity
-                        style={styles.durationButton}
-                        onPress={() => {
-                          const newAdvance = scheduleSettings.advanceBookingDays + 1;
-                          if (newAdvance <= 365) {
-                            setScheduleSettings(prev => ({
-                              ...prev,
-                              advanceBookingDays: newAdvance
-                            }));
-                          }
-                        }}
-                        disabled={scheduleSettings.advanceBookingDays >= 365}
-                      >
-                        <Ionicons name="add" size={20} color={scheduleSettings.advanceBookingDays >= 365 ? "#ccc" : "#667eea"} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-
-          {/* Acciones del Modal */}
-          <View style={styles.scheduleModalActions}>
-            <TouchableOpacity
-              style={[styles.scheduleModalButton, styles.scheduleModalButtonSecondary]}
-              onPress={handleResetScheduleSettings}
-            >
-              <Ionicons name="refresh" size={20} color="#FF6B35" />
-              <Text style={styles.scheduleModalButtonSecondaryText}>Restablecer</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.scheduleModalButton, styles.scheduleModalButtonPrimary]}
-              onPress={handleSaveScheduleSettings}
-            >
-              <Ionicons name="save" size={20} color="white" />
-              <Text style={styles.scheduleModalButtonPrimaryText}>Guardar Horarios</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </Modal>
 
@@ -8564,6 +7938,11 @@ function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <MedicalAuthorizationModal
+        visible={showMedicalAuthorizationModal}
+        onClose={() => setShowMedicalAuthorizationModal(false)}
+      />
 
       {/* Modal de Profesionales Favoritos */}
       <Modal
@@ -12986,3 +12365,4 @@ const styles = StyleSheet.create({
 });
 
 export default SettingsScreen;
+

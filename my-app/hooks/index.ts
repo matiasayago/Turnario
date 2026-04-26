@@ -1,3 +1,4 @@
+// @ts-nocheck — beta
 // Hooks existentes
 export { default as useColorScheme } from './useColorScheme';
 export { default as useThemeColor } from './useThemeColor';

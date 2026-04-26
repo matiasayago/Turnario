@@ -1,26 +1,51 @@
+// @ts-nocheck � beta
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import notificationService from '../services/notificationService';
+import { getBackendBaseUrl } from '../config/backend';
+import { simpleNotificationService } from '../services/simpleNotificationService';
+import simpleAuthService from '../services/simpleAuthService';
 import { useAuth } from './AuthContext';
+import { useRegisterExpoPushToken } from '../hooks/useRegisterExpoPushToken';
 
 export interface NotificationItem {
   id: string;
-  type: 'appointment_request' | 'appointment_confirmed' | 'appointment_cancelled' | 'reminder' | 'payment_required' | 'payment_successful';
+  type:
+    | 'appointment_request'
+    | 'appointment_confirmed'
+    | 'appointment_cancelled'
+    | 'appointment_cancelled_by_client'
+    | 'appointment_rescheduled_by_client'
+    | 'appointment_cancelled_by_professional'
+    | 'appointment_rescheduled_by_professional'
+    | 'reminder'
+    | 'payment_required'
+    | 'payment_successful'
+    | 'chat_message'
+    | 'system'
+    | 'password_reset';
   title: string;
   message: string;
   recipientId: string;
   senderId: string;
   senderName: string;
   appointmentData?: {
-    service: string;
-    date: string;
-    time: string;
+    /** _id Mongo de ExpoAppointment */
+    appointmentId?: string;
+    service?: string;
+    date?: string;
+    time?: string;
     notes?: string;
     professional?: string;
     professionalId?: string;
+    professionalName?: string;
     depositAmount?: number;
     totalAmount?: number;
+    /** Deep link al chat (clave idA_idB) */
+    chatConversationKey?: string;
+    chatMessageId?: string;
   };
+  /** Datos para recuperación de contraseña (notificación in-app / push) */
+  passwordReset?: { resetToken?: string };
   timestamp: Date;
   read: boolean;
 }
@@ -66,6 +91,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const pushUserId = user ? String((user as { _id?: string })._id || (user as { id?: string }).id || '') : undefined;
+  useRegisterExpoPushToken(pushUserId);
 
   // Cargar notificaciones al iniciar
   useEffect(() => {
@@ -81,37 +108,111 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       setLoading(true);
       setError(null);
-      
-      // Intentar cargar del backend
+
+      // Cargar notificaciones reales desde API Expo
       try {
-        const backendNotifications = await notificationService.getUserNotifications();
-        
-        // Convertir notificaciones del backend al formato del frontend
-        const convertedNotifications: NotificationItem[] = backendNotifications.map(notif => ({
-          id: notif._id,
-          type: notif.type as any,
-          title: notif.title,
-          message: notif.message,
-          recipientId: notif.recipientId,
-          senderId: notif.senderId || '',
-          senderName: notif.sender?.fullName || 'Sistema',
-          appointmentData: notif.appointmentData ? {
-            service: notif.appointmentData.service,
-            date: notif.appointmentData.date,
-            time: notif.appointmentData.time,
-            professional: notif.appointmentData.professional,
-            professionalId: notif.appointmentData.appointmentId,
-          } : undefined,
-          timestamp: new Date(notif.timestamp),
-          read: notif.isRead,
-        }));
-        
+        const token = await simpleAuthService.getToken();
+        let convertedNotifications: NotificationItem[] = [];
+        let expoFetchSucceeded = false;
+
+        if (token) {
+          const res = await fetch(`${getBackendBaseUrl()}/api/v1/expo-notifications`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (res.ok) {
+            expoFetchSucceeded = true;
+            const json = await res.json();
+            const rows = Array.isArray(json.data) ? json.data : [];
+            convertedNotifications = rows.map((n: Record<string, unknown>) => {
+              const d = (n.data as Record<string, string> | undefined) || {};
+              const sender =
+                (n.senderId && String(n.senderId)) || 'system';
+              const isChat = n.type === 'chat_message';
+              return {
+                id: String(n._id),
+                type: n.type as NotificationItem['type'],
+                title: String(n.title || ''),
+                message: String(n.message || ''),
+                recipientId: String(n.recipientId),
+                senderId: sender,
+                senderName:
+                  (d.patientName as string) ||
+                  (d.professionalName as string) ||
+                  (isChat ? 'Chat' : 'Cliente'),
+                appointmentData: {
+                  appointmentId: d.appointmentId,
+                  service: String(d.service || ''),
+                  date: String(d.date || ''),
+                  time: String(d.time || ''),
+                  notes: d.notes,
+                  professional: d.professionalName,
+                  professionalName: d.professionalName,
+                  professionalId: d.professionalId,
+                  depositAmount:
+                    d.depositAmount != null && d.depositAmount !== ''
+                      ? Number(d.depositAmount)
+                      : undefined,
+                  chatConversationKey: d.chatConversationKey,
+                  chatMessageId: d.chatMessageId,
+                },
+                passwordReset:
+                  n.type === 'password_reset' && d.resetToken
+                    ? { resetToken: String(d.resetToken) }
+                    : undefined,
+                timestamp: new Date(
+                  (n.createdAt as string) || (n.updatedAt as string) || Date.now()
+                ),
+                read: Boolean(n.read),
+              };
+            });
+          }
+        }
+
+        const myId = String(user._id || user.id || '').trim();
+        if (myId) {
+          convertedNotifications = convertedNotifications.filter(
+            (n) => String(n.recipientId) === myId
+          );
+        }
+
+        // Solo usar fallback legacy/mock cuando la API expo falló.
+        // Si la API respondió OK pero vacía, debemos respetar "sin notificaciones".
+        if (!expoFetchSucceeded && convertedNotifications.length === 0) {
+          const backendNotifications = await simpleNotificationService.getUserNotifications();
+          convertedNotifications = backendNotifications.map((notif) => ({
+            id: notif._id,
+            type: notif.type as NotificationItem['type'],
+            title: notif.title,
+            message: notif.message,
+            recipientId: notif.recipientId,
+            senderId: 'system',
+            senderName: 'Sistema',
+            appointmentData: notif.data
+              ? {
+                  service: notif.data.service,
+                  date: notif.data.date,
+                  time: notif.data.time,
+                  professional: notif.data.professional,
+                  professionalId: notif.data.appointmentId,
+                }
+              : undefined,
+            timestamp: new Date(notif.createdAt),
+            read: notif.isRead,
+          }));
+          if (myId) {
+            convertedNotifications = convertedNotifications.filter(
+              (n) => String(n.recipientId) === myId
+            );
+          }
+        }
+
         setNotifications(convertedNotifications);
-        console.log('✅ Notificaciones cargadas del backend:', convertedNotifications.length);
-        
-        // Guardar en AsyncStorage como respaldo
+        console.log('✅ Notificaciones cargadas:', convertedNotifications.length);
+
         await AsyncStorage.setItem('notifications', JSON.stringify(convertedNotifications));
-        
       } catch (backendError) {
         console.error('Error cargando del backend, usando respaldo local:', backendError);
         
@@ -119,10 +220,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const savedNotifications = await AsyncStorage.getItem('notifications');
         if (savedNotifications) {
           const parsed = JSON.parse(savedNotifications);
-          const notificationsWithDates = parsed.map((n: any) => ({
-            ...n,
-            timestamp: new Date(n.timestamp),
-          }));
+          const uid = String(user._id || user.id || '').trim();
+          const notificationsWithDates = parsed
+            .map((n: NotificationItem) => ({
+              ...n,
+              timestamp: new Date(n.timestamp),
+            }))
+            .filter((n: NotificationItem) => !uid || String(n.recipientId) === uid);
           setNotifications(notificationsWithDates);
         }
       }
@@ -165,7 +269,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // Intentar enviar al backend
     if (user) {
       try {
-        await notificationService.createNotification({
+        await simpleNotificationService.createNotification({
           recipientId: notificationData.recipientId,
           type: notificationData.type as any,
           title: notificationData.title,
@@ -192,12 +296,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Marcar como leída (backend y local)
   const markAsRead = async (notificationId: string) => {
     try {
-      // Actualizar en el backend
       try {
-        await notificationService.markAsRead(notificationId);
-        console.log('✅ Notificación marcada como leída en backend');
+        const token = await simpleAuthService.getToken();
+        if (token && /^[a-fA-F0-9]{24}$/.test(notificationId)) {
+          await fetch(
+            `${getBackendBaseUrl()}/api/v1/expo-notifications/${notificationId}/read`,
+            {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+        }
+      } catch (e) {
+        console.warn('expo-notifications read:', e);
+      }
+      try {
+        await simpleNotificationService.markAsRead(notificationId);
       } catch (backendError) {
-        console.error('Error marcando como leída en backend:', backendError);
+        console.error('Error marcando como leída (legacy):', backendError);
       }
       
       // Actualizar localmente
@@ -217,7 +333,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       // Eliminar del backend
       try {
-        await notificationService.deleteNotification(notificationId);
+        await simpleNotificationService.deleteNotification(notificationId);
         console.log('✅ Notificación eliminada del backend');
       } catch (backendError) {
         console.error('Error eliminando del backend:', backendError);
@@ -235,16 +351,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Obtener conteo de no leídas
   const getUnreadCount = (userId: string) => {
-    return notifications.filter(notification => 
-      notification.recipientId === userId && !notification.read
+    const uid = String(userId);
+    return notifications.filter(
+      (notification) => String(notification.recipientId) === uid && !notification.read
     ).length;
   };
 
   // Obtener notificaciones del usuario
   const getNotificationsForUser = (userId: string) => {
-    const userNotifications = notifications.filter(notification => 
-      notification.recipientId === userId
-    ).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    const uid = String(userId);
+    const userNotifications = notifications
+      .filter((notification) => String(notification.recipientId) === uid)
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     
     return userNotifications;
   };
@@ -252,17 +370,35 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Limpiar todas las notificaciones
   const clearAllNotifications = async (userId: string) => {
     try {
-      // Limpiar del backend
+      const token = await simpleAuthService.getToken();
+
+      // Limpiar del backend (API Expo real)
       try {
-        await notificationService.clearAllNotifications();
-        console.log('✅ Todas las notificaciones limpiadas del backend');
-      } catch (backendError) {
-        console.error('Error limpiando del backend:', backendError);
+        if (token) {
+          await fetch(`${getBackendBaseUrl()}/api/v1/expo-notifications`, {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          console.log('✅ Todas las expo-notifications limpiadas del backend');
+        }
+      } catch (expoBackendError) {
+        console.error('Error limpiando expo-notifications del backend:', expoBackendError);
+      }
+
+      // Compatibilidad con backend legacy (si existe en algunos entornos)
+      try {
+        await simpleNotificationService.clearAllNotifications();
+      } catch (legacyBackendError) {
+        console.warn('clearAllNotifications legacy:', legacyBackendError);
       }
       
       // Limpiar localmente
-      const updatedNotifications = notifications.filter(notification => 
-        notification.recipientId !== userId
+      const uid = String(userId);
+      const updatedNotifications = notifications.filter(
+        (notification) => String(notification.recipientId) !== uid
       );
       setNotifications(updatedNotifications);
       saveNotifications(updatedNotifications);

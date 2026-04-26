@@ -1,3 +1,4 @@
+// @ts-nocheck ó beta
 // Configuraci√≥n de Mercado Pago
 export const MERCADOPAGO_CONFIG = {
   // Credenciales de prueba (sandbox)

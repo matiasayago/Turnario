@@ -1,0 +1,1122 @@
+2025-09-01 04:40:51 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Mon Sep 01 2025 04:40:51 GMT-0300 (hora estándar de Argentina)","process":{"pid":26900,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":87924736,"heapTotal":60739584,"heapUsed":37617272,"external":38466859,"arrayBuffers":36090397}},"os":{"loadavg":[0,0,0],"uptime":202473.078},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 04:41:00 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Mon Sep 01 2025 04:41:00 GMT-0300 (hora estándar de Argentina)","process":{"pid":29880,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":88846336,"heapTotal":60477440,"heapUsed":38185744,"external":38492342,"arrayBuffers":36090573}},"os":{"loadavg":[0,0,0],"uptime":202482.093},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 04:44:06 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"]},"exception":true,"date":"Mon Sep 01 2025 04:44:06 GMT-0300 (hora estándar de Argentina)","process":{"pid":33584,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"],"memoryUsage":{"rss":87851008,"heapTotal":60215296,"heapUsed":36538528,"external":38466858,"arrayBuffers":36090396}},"os":{"loadavg":[0,0,0],"uptime":202668.531},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 04:44:57 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"]},"exception":true,"date":"Mon Sep 01 2025 04:44:57 GMT-0300 (hora estándar de Argentina)","process":{"pid":29864,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"],"memoryUsage":{"rss":87863296,"heapTotal":60215296,"heapUsed":36318440,"external":38466858,"arrayBuffers":36090396}},"os":{"loadavg":[0,0,0],"uptime":202719.437},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 04:45:26 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"]},"exception":true,"date":"Mon Sep 01 2025 04:45:26 GMT-0300 (hora estándar de Argentina)","process":{"pid":28824,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"],"memoryUsage":{"rss":88363008,"heapTotal":60215296,"heapUsed":36309904,"external":38466858,"arrayBuffers":36090396}},"os":{"loadavg":[0,0,0],"uptime":202748.125},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 10:16:25 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"]},"exception":true,"date":"Mon Sep 01 2025 10:16:25 GMT-0300 (hora estándar de Argentina)","process":{"pid":17496,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\start-dev.js"],"memoryUsage":{"rss":87605248,"heapTotal":60215296,"heapUsed":36364640,"external":38466858,"arrayBuffers":36090396}},"os":{"loadavg":[0,0,0],"uptime":222606.828},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\start-dev.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 15:52:53 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Mon Sep 01 2025 15:52:53 GMT-0300 (hora estándar de Argentina)","process":{"pid":34940,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":84254720,"heapTotal":60739584,"heapUsed":37694592,"external":38466859,"arrayBuffers":36090397}},"os":{"loadavg":[0,0,0],"uptime":242797.562},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 16:19:55 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Mon Sep 01 2025 16:19:55 GMT-0300 (hora estándar de Argentina)","process":{"pid":35684,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":79511552,"heapTotal":58642432,"heapUsed":27038232,"external":20617280,"arrayBuffers":18262287}},"os":{"loadavg":[0,0,0],"uptime":244419.5},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"production"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-01 18:05:00 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Mon Sep 01 2025 18:05:00 GMT-0300 (hora estándar de Argentina)","process":{"pid":22724,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":79413248,"heapTotal":58380288,"heapUsed":27114016,"external":20617280,"arrayBuffers":18262287}},"os":{"loadavg":[0,0,0],"uptime":250724.234},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"production"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-02 00:40:24 [ERROR]: uncaughtException: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","C:\\Turnario\\TurnarioApp\\backend\\controllers\\authController.js","C:\\Turnario\\TurnarioApp\\backend\\routes\\auth.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Tue Sep 02 2025 00:40:24 GMT-0300 (hora estándar de Argentina)","process":{"pid":16080,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":78323712,"heapTotal":58380288,"heapUsed":27027416,"external":20617280,"arrayBuffers":18262287}},"os":{"loadavg":[0,0,0],"uptime":274448.203},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":20,"file":"C:\\Turnario\\TurnarioApp\\backend\\services\\emailService.js","function":null,"line":2,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"production"}
+Error: Cannot find module 'handlebars'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\services\emailService.js
+- C:\Turnario\TurnarioApp\backend\controllers\authController.js
+- C:\Turnario\TurnarioApp\backend\routes\auth.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\services\emailService.js:2:20)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-02 01:45:04 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::3001
+Error: listen EADDRINUSE: address already in use :::3001
+    at Server.setupListenHandle [as _listen2] (node:net:1937:16)
+    at listenInCluster (node:net:1994:12)
+    at Server.listen (node:net:2099:7)
+    at Function.listen (C:\Turnario\TurnarioApp\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (C:\Turnario\TurnarioApp\backend\server-simple.js:77:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {"error":{"code":"EADDRINUSE","errno":-4091,"syscall":"listen","address":"::","port":3001},"exception":true,"date":"Tue Sep 02 2025 01:45:04 GMT-0300 (hora estándar de Argentina)","process":{"pid":21844,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server-simple.js"],"memoryUsage":{"rss":92983296,"heapTotal":60485632,"heapUsed":40960192,"external":20636947,"arrayBuffers":18262824}},"os":{"loadavg":[0,0,0],"uptime":278328.703},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1937,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1994,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2099,"method":"listen","native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\node_modules\\express\\lib\\application.js","function":"Function.listen","line":635,"method":"listen","native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\server-simple.js","function":"startServer","line":77,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"process.processTicksAndRejections","line":105,"method":"processTicksAndRejections","native":false}],"service":"turnario-backend","environment":"production"}
+Error: listen EADDRINUSE: address already in use :::3001
+    at Server.setupListenHandle [as _listen2] (node:net:1937:16)
+    at listenInCluster (node:net:1994:12)
+    at Server.listen (node:net:2099:7)
+    at Function.listen (C:\Turnario\TurnarioApp\backend\node_modules\express\lib\application.js:635:24)
+    at startServer (C:\Turnario\TurnarioApp\backend\server-simple.js:77:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-03 02:06:07 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 02:06:07 GMT-0300 (hora estándar de Argentina)","process":{"pid":18380,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":109465600,"heapTotal":69505024,"heapUsed":39092488,"external":38475249,"arrayBuffers":36098787}},"os":{"loadavg":[0,0,0],"uptime":365991.093},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 02:06:20 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 02:06:20 GMT-0300 (hora estándar de Argentina)","process":{"pid":22620,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":109527040,"heapTotal":68980736,"heapUsed":39215432,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":366004.343},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 02:07:17 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 02:07:17 GMT-0300 (hora estándar de Argentina)","process":{"pid":35544,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":110084096,"heapTotal":69505024,"heapUsed":38880968,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":366061.421},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 02:12:22 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 02:12:22 GMT-0300 (hora estándar de Argentina)","process":{"pid":37784,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":109809664,"heapTotal":69505024,"heapUsed":38679880,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":366366.453},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 02:15:12 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 02:15:12 GMT-0300 (hora estándar de Argentina)","process":{"pid":31944,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":109395968,"heapTotal":69505024,"heapUsed":38848592,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":366536.14},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 02:15:39 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 02:15:39 GMT-0300 (hora estándar de Argentina)","process":{"pid":31352,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":109854720,"heapTotal":69242880,"heapUsed":38712648,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":366563.437},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 11:07:28 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 11:07:28 GMT-0300 (hora estándar de Argentina)","process":{"pid":38832,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":107327488,"heapTotal":69505024,"heapUsed":38815152,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":398472.062},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 16:03:20 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 16:03:20 GMT-0300 (hora estándar de Argentina)","process":{"pid":30896,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":103919616,"heapTotal":69767168,"heapUsed":38860352,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":416224.671},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 16:05:02 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 16:05:02 GMT-0300 (hora estándar de Argentina)","process":{"pid":39792,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":105308160,"heapTotal":69767168,"heapUsed":38815872,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":416326.437},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 16:06:02 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 16:06:02 GMT-0300 (hora estándar de Argentina)","process":{"pid":38500,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":105074688,"heapTotal":69242880,"heapUsed":38586360,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":416386.781},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 16:06:14 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 16:06:14 GMT-0300 (hora estándar de Argentina)","process":{"pid":42492,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":105566208,"heapTotal":69242880,"heapUsed":38754424,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":416398.109},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 16:08:31 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 16:08:31 GMT-0300 (hora estándar de Argentina)","process":{"pid":27356,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":105406464,"heapTotal":69505024,"heapUsed":38752248,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":416535.234},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-03 16:09:38 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Wed Sep 03 2025 16:09:38 GMT-0300 (hora estándar de Argentina)","process":{"pid":29840,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":104316928,"heapTotal":68980736,"heapUsed":39030632,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":416602.468},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-05 03:36:01 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Fri Sep 05 2025 03:36:01 GMT-0300 (hora estándar de Argentina)","process":{"pid":25772,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":108433408,"heapTotal":69242880,"heapUsed":39040352,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":544192.125},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-06 02:00:13 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Sat Sep 06 2025 02:00:13 GMT-0300 (hora estándar de Argentina)","process":{"pid":6416,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":114257920,"heapTotal":69505024,"heapUsed":39132536,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":624846.218},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-07 02:56:22 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Sun Sep 07 2025 02:56:22 GMT-0300 (hora estándar de Argentina)","process":{"pid":20864,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":108347392,"heapTotal":69505024,"heapUsed":38998720,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":714617.453},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-07 03:00:35 [ERROR]: uncaughtException: Route.get() requires a callback function but got a [object Object]
+Error: Route.get() requires a callback function but got a [object Object]
+    at Route.<computed> [as get] (C:\Turnario\TurnarioApp\backend\node_modules\express\lib\router\route.js:216:15)
+    at proto.<computed> [as get] (C:\Turnario\TurnarioApp\backend\node_modules\express\lib\router\index.js:521:19)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\availability.js:78:8)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12) {"error":{},"exception":true,"date":"Sun Sep 07 2025 03:00:35 GMT-0300 (hora estándar de Argentina)","process":{"pid":42844,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\simple-dev-server.js"],"memoryUsage":{"rss":96423936,"heapTotal":62164992,"heapUsed":39593112,"external":20617487,"arrayBuffers":18262487}},"os":{"loadavg":[0,0,0],"uptime":714871.187},"trace":[{"column":15,"file":"C:\\Turnario\\TurnarioApp\\backend\\node_modules\\express\\lib\\router\\route.js","function":"Route.<computed> [as get]","line":216,"method":"<computed> [as get]","native":false},{"column":19,"file":"C:\\Turnario\\TurnarioApp\\backend\\node_modules\\express\\lib\\router\\index.js","function":"proto.<computed> [as get]","line":521,"method":"<computed> [as get]","native":false},{"column":8,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\availability.js","function":null,"line":78,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1108,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Route.get() requires a callback function but got a [object Object]
+    at Route.<computed> [as get] (C:\Turnario\TurnarioApp\backend\node_modules\express\lib\router\route.js:216:15)
+    at proto.<computed> [as get] (C:\Turnario\TurnarioApp\backend\node_modules\express\lib\router\index.js:521:19)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\availability.js:78:8)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+2025-09-11 00:58:15 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Thu Sep 11 2025 00:58:15 GMT-0300 (hora estándar de Argentina)","process":{"pid":16048,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":113266688,"heapTotal":69242880,"heapUsed":39205192,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":73279.64},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-11 01:12:16 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Thu Sep 11 2025 01:12:16 GMT-0300 (hora estándar de Argentina)","process":{"pid":23396,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":113856512,"heapTotal":69505024,"heapUsed":39032376,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":74120.328},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-11 01:46:19 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Thu Sep 11 2025 01:46:19 GMT-0300 (hora estándar de Argentina)","process":{"pid":26932,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":113770496,"heapTotal":70029312,"heapUsed":38955360,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":76162.921},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-11 01:47:15 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Thu Sep 11 2025 01:47:15 GMT-0300 (hora estándar de Argentina)","process":{"pid":29364,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":113725440,"heapTotal":69505024,"heapUsed":39006704,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":76219.203},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-11 01:49:36 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Thu Sep 11 2025 01:49:36 GMT-0300 (hora estándar de Argentina)","process":{"pid":13164,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":113594368,"heapTotal":68718592,"heapUsed":39844400,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":76360.421},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+2025-09-11 03:02:41 [ERROR]: uncaughtException: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","C:\\Turnario\\TurnarioApp\\backend\\server.js"]},"exception":true,"date":"Thu Sep 11 2025 03:02:41 GMT-0300 (hora estándar de Argentina)","process":{"pid":21288,"uid":null,"gid":null,"cwd":"C:\\Turnario\\TurnarioApp\\backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v22.14.0","argv":["C:\\Program Files\\nodejs\\node.exe","C:\\Turnario\\TurnarioApp\\backend\\server.js"],"memoryUsage":{"rss":113889280,"heapTotal":69505024,"heapUsed":39167048,"external":38467057,"arrayBuffers":36090595}},"os":{"loadavg":[0,0,0],"uptime":80745.5},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Function._resolveFilename","line":1225,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Function._load","line":1055,"method":"_load","native":false},{"column":14,"file":"node:diagnostics_channel","function":"TracingChannel.traceSync","line":322,"method":"traceSync","native":false},{"column":24,"file":"node:internal/modules/cjs/loader","function":"wrapModuleLoad","line":220,"method":null,"native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1311,"method":"require","native":false},{"column":16,"file":"node:internal/modules/helpers","function":"require","line":136,"method":null,"native":false},{"column":24,"file":"C:\\Turnario\\TurnarioApp\\backend\\routes\\medicalHistory.js","function":null,"line":3,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1554,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Object..js","line":1706,"method":".js","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1289,"method":"load","native":false}],"service":"turnario-backend","environment":"development"}
+Error: Cannot find module '../models/MedicalHistory'
+Require stack:
+- C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js
+- C:\Turnario\TurnarioApp\backend\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (C:\Turnario\TurnarioApp\backend\routes\medicalHistory.js:3:24)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)

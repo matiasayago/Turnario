@@ -3,36 +3,79 @@ const path = require('path');
 const fs = require('fs').promises;
 const handlebars = require('handlebars');
 
+/** FRONTEND_URL a veces viene con varias URLs separadas por coma; el enlace del mail debe ser una sola base válida. */
+function getPrimaryFrontendBaseUrl() {
+  const raw = String(process.env.FRONTEND_URL || '').trim();
+  if (!raw) return '';
+  const first = raw.split(',')[0].trim().replace(/\/$/, '');
+  return first;
+}
+
 class EmailService {
   constructor() {
     this.transporter = null;
     this.templates = new Map();
-    this.initializeTransporter();
-    this.loadEmailTemplates();
+    /** Una sola promesa: transporte + plantillas listos antes del primer sendMail */
+    this._bootstrapPromise = this.bootstrap();
+  }
+
+  /** Esperar a que transporter y plantillas estén listos (evita carreras al arranque). */
+  async ensureReady() {
+    await this._bootstrapPromise;
+  }
+
+  async bootstrap() {
+    await Promise.all([this.initializeTransporter(), this.loadEmailTemplates()]);
+  }
+
+  /**
+   * Instancia única compartida por todo el proceso (auth, citas, recordatorios).
+   * Evita dos inicializaciones async distintas y estados inconsistentes.
+   */
+  static getSingleton() {
+    if (!EmailService._singleton) {
+      EmailService._singleton = new EmailService();
+    }
+    return EmailService._singleton;
   }
 
   // Inicializar el transportador de emails
   async initializeTransporter() {
     try {
-      // Configuración para desarrollo (Gmail)
-      if (process.env.NODE_ENV === 'development') {
-        this.transporter = nodemailer.createTransporter({
-          service: 'gmail',
-          auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_APP_PASSWORD // Contraseña de aplicación de Gmail
-          }
-        });
-      } else {
-        // Configuración para producción (SMTP)
-        this.transporter = nodemailer.createTransporter({
-          host: process.env.SMTP_HOST,
-          port: process.env.SMTP_PORT || 587,
+      const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+      const emailPass = process.env.EMAIL_APP_PASSWORD || process.env.SMTP_PASS;
+
+      // Verificar si hay configuración de email
+      if (!emailUser || !emailPass) {
+        console.log('⚠️ No email configuration found, email service disabled');
+        this.transporter = null;
+        return;
+      }
+
+      const smtpHost = process.env.SMTP_HOST && String(process.env.SMTP_HOST).trim();
+
+      if (smtpHost) {
+        this.transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: parseInt(String(process.env.SMTP_PORT || '587'), 10) || 587,
           secure: process.env.SMTP_SECURE === 'true',
           auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-          }
+            user: emailUser,
+            pass: emailPass,
+          },
+        });
+      } else {
+        if (process.env.NODE_ENV && process.env.NODE_ENV !== 'development') {
+          console.log(
+            '📧 SMTP_HOST no definido: usando transporte Gmail (service: gmail). Definí SMTP_HOST para otro proveedor.'
+          );
+        }
+        this.transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: emailUser,
+            pass: emailPass,
+          },
         });
       }
 
@@ -56,9 +99,13 @@ class EmailService {
         'appointment_confirmation': this.getAppointmentConfirmationTemplate(),
         'appointment_reminder': this.getAppointmentReminderTemplate(),
         'appointment_cancellation': this.getAppointmentCancellationTemplate(),
+        'appointment_rejection': this.getAppointmentRejectionTemplate(),
         'password_reset': this.getPasswordResetTemplate(),
         'payment_confirmation': this.getPaymentConfirmationTemplate(),
-        'professional_welcome': this.getProfessionalWelcomeTemplate()
+        'professional_welcome': this.getProfessionalWelcomeTemplate(),
+        'professional_new_booking': this.getProfessionalNewBookingTemplate(),
+        'professional_patient_cancelled': this.getProfessionalPatientCancelledTemplate(),
+        'professional_patient_rescheduled': this.getProfessionalPatientRescheduledTemplate(),
       };
 
       // Cargar plantillas personalizadas si existen
@@ -89,6 +136,8 @@ class EmailService {
   // Enviar email
   async sendEmail(to, subject, templateName, data = {}) {
     try {
+      await this.ensureReady();
+
       if (!this.transporter) {
         throw new Error('Email service not initialized');
       }
@@ -101,9 +150,16 @@ class EmailService {
       // Renderizar plantilla
       const htmlContent = template(data);
       
+      const fromEmail =
+        String(process.env.EMAIL_FROM || process.env.EMAIL_USER || process.env.SMTP_USER || '')
+          .trim();
+      if (!fromEmail) {
+        throw new Error('Falta EMAIL_FROM, EMAIL_USER o SMTP_USER para el remitente del correo');
+      }
+
       // Configurar opciones del email
       const mailOptions = {
-        from: `"${process.env.EMAIL_FROM_NAME || 'Turnario'}" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+        from: `"${process.env.EMAIL_FROM_NAME || 'Turnario'}" <${fromEmail}>`,
         to: to,
         subject: subject,
         html: htmlContent,
@@ -185,25 +241,98 @@ class EmailService {
       date: new Date(appointment.date).toLocaleDateString('es-ES'),
       time: appointment.time,
       reason: reason || 'Sin motivo especificado',
-      rescheduleUrl: `${process.env.FRONTEND_URL}/appointments/new`
+      rescheduleUrl: `${process.env.FRONTEND_URL || ''}/appointments/new`
     };
 
     return await this.sendEmail(user.email, subject, 'appointment_cancellation', data);
   }
 
+  /** Solicitud rechazada por el profesional (cita no confirmada). */
+  async sendAppointmentRejection(appointment, user) {
+    const subject = 'Tu solicitud de cita no pudo ser confirmada';
+    const data = {
+      userName: user.fullName,
+      serviceName: appointment.service?.name || 'Servicio',
+      professionalName: appointment.professional?.fullName || 'Profesional',
+      date: new Date(appointment.date).toLocaleDateString('es-ES'),
+      time: appointment.time,
+      rescheduleUrl: `${process.env.FRONTEND_URL || ''}/appointments/new`
+    };
+
+    return await this.sendEmail(user.email, subject, 'appointment_rejection', data);
+  }
+
+  /** Paciente solicita turno (misma alerta que notificación in-app al profesional). */
+  async sendProfessionalNewBookingEmail(proUser, detail) {
+    const requiresDeposit = Boolean(detail.requiresDeposit);
+    const subject = requiresDeposit
+      ? 'Nueva reserva con seña pendiente — Turnario'
+      : 'Nueva solicitud de cita — Turnario';
+    const data = {
+      professionalName: proUser.fullName || 'Profesional',
+      patientName: detail.patientName || 'Paciente',
+      serviceName: detail.service || 'Servicio',
+      date: detail.date || '',
+      time: detail.time || '',
+      notes: detail.notes || '',
+      requiresDeposit,
+      depositAmount: detail.depositAmount != null ? String(detail.depositAmount) : '',
+      appointmentId: detail.appointmentId || '',
+    };
+    return await this.sendEmail(proUser.email, subject, 'professional_new_booking', data);
+  }
+
+  async sendProfessionalPatientCancelledEmail(proUser, detail) {
+    const subject = 'Turno cancelado por el paciente — Turnario';
+    const data = {
+      professionalName: proUser.fullName || 'Profesional',
+      patientName: detail.patientName || 'Paciente',
+      serviceName: detail.service || 'Servicio',
+      date: detail.date || '',
+      time: detail.time || '',
+    };
+    return await this.sendEmail(proUser.email, subject, 'professional_patient_cancelled', data);
+  }
+
+  async sendProfessionalPatientRescheduledEmail(proUser, detail) {
+    const subject = 'Turno reprogramado por el paciente — Turnario';
+    const data = {
+      professionalName: proUser.fullName || 'Profesional',
+      patientName: detail.patientName || 'Paciente',
+      serviceName: detail.service || 'Servicio',
+      previousDate: detail.previousDate || '',
+      previousTime: detail.previousTime || '',
+      newDate: detail.newDate || '',
+      newTime: detail.newTime || '',
+    };
+    return await this.sendEmail(proUser.email, subject, 'professional_patient_rescheduled', data);
+  }
+
   // Enviar reset de contraseña
   async sendPasswordReset(user, resetToken) {
     const subject = 'Restablecimiento de contraseña';
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    
+    const to = String(user && user.email ? user.email : '')
+      .trim()
+      .toLowerCase();
+    if (!to) {
+      throw new Error('Usuario sin email válido para enviar restablecimiento');
+    }
+
+    const appScheme = String(process.env.EXPO_APP_SCHEME || 'myapp').trim();
+    const appResetUrl = `${appScheme}://reset-password?token=${encodeURIComponent(resetToken)}`;
+    const webBase = getPrimaryFrontendBaseUrl();
+    const resetUrl = webBase
+      ? `${webBase}/reset-password?token=${encodeURIComponent(resetToken)}`
+      : appResetUrl;
+
     const data = {
-      userName: user.fullName,
+      userName: user.fullName || 'Usuario',
       resetUrl: resetUrl,
       expiryHours: 24,
       supportEmail: process.env.SUPPORT_EMAIL || 'soporte@turnario.com'
     };
 
-    return await this.sendEmail(user.email, subject, 'password_reset', data);
+    return await this.sendEmail(to, subject, 'password_reset', data);
   }
 
   // Enviar confirmación de pago
@@ -466,6 +595,49 @@ class EmailService {
     `;
   }
 
+  getAppointmentRejectionTemplate() {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #795548; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f9f9f9; }
+          .box { background: #EFEBE9; padding: 15px; margin: 15px 0; border: 1px solid #795548; border-radius: 5px; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Solicitud no confirmada</h1>
+          </div>
+          <div class="content">
+            <h2>Hola {{userName}},</h2>
+            <p>El profesional no pudo confirmar tu solicitud para el siguiente turno:</p>
+            <div class="box">
+              <p><strong>Servicio:</strong> {{serviceName}}</p>
+              <p><strong>Profesional:</strong> {{professionalName}}</p>
+              <p><strong>Fecha:</strong> {{date}}</p>
+              <p><strong>Hora:</strong> {{time}}</p>
+            </div>
+            <p>Podés buscar otro horario o profesional desde tu cuenta.</p>
+            <p style="text-align: center;">
+              <a href="{{rescheduleUrl}}" style="display: inline-block; padding: 10px 20px; background: #2196F3; color: white; text-decoration: none; border-radius: 5px;">Nueva reserva</a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>Este es un email automático de Turnario. No respondas a este mensaje.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
   getPasswordResetTemplate() {
     return `
       <!DOCTYPE html>
@@ -561,6 +733,107 @@ class EmailService {
     `;
   }
 
+  getProfessionalNewBookingTemplate() {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #5C6BC0; color: white; padding: 20px; text-align: center; }
+          .box { background: #fff; padding: 16px; margin: 12px 0; border-left: 4px solid #5C6BC0; }
+          .footer { text-align: center; padding: 16px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header"><h1>Nueva solicitud de cita</h1></div>
+          <div class="content">
+            <p>Hola {{professionalName}},</p>
+            <p><strong>{{patientName}}</strong> solicitó un turno:</p>
+            <div class="box">
+              <p><strong>Servicio:</strong> {{serviceName}}</p>
+              <p><strong>Fecha:</strong> {{date}}</p>
+              <p><strong>Hora:</strong> {{time}}</p>
+              {{#if notes}}<p><strong>Notas:</strong> {{notes}}</p>{{/if}}
+            </div>
+            {{#if requiresDeposit}}
+            <p>La reserva incluye seña de <strong>\${{depositAmount}}</strong>. El turno se confirma cuando el paciente pague en la app.</p>
+            {{else}}
+            <p>Ingresá a Turnario → <strong>Notificaciones</strong> para confirmar o rechazar la solicitud.</p>
+            {{/if}}
+          </div>
+          <div class="footer">Email automático de Turnario.</div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getProfessionalPatientCancelledTemplate() {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #E53935; color: white; padding: 20px; text-align: center; }
+          .box { background: #FFEBEE; padding: 16px; margin: 12px 0; border-radius: 6px; }
+          .footer { text-align: center; padding: 16px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header"><h1>Turno cancelado por el paciente</h1></div>
+          <div class="content">
+            <p>Hola {{professionalName}},</p>
+            <p><strong>{{patientName}}</strong> canceló esta cita:</p>
+            <div class="box">
+              <p><strong>Servicio:</strong> {{serviceName}}</p>
+              <p><strong>Fecha:</strong> {{date}}</p>
+              <p><strong>Hora:</strong> {{time}}</p>
+            </div>
+          </div>
+          <div class="footer">Email automático de Turnario.</div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  getProfessionalPatientRescheduledTemplate() {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #FB8C00; color: white; padding: 20px; text-align: center; }
+          .box { background: #FFF3E0; padding: 16px; margin: 12px 0; border-radius: 6px; }
+          .footer { text-align: center; padding: 16px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header"><h1>Turno reprogramado por el paciente</h1></div>
+          <div class="content">
+            <p>Hola {{professionalName}},</p>
+            <p><strong>{{patientName}}</strong> cambió la fecha/hora del servicio <strong>{{serviceName}}</strong>:</p>
+            <div class="box">
+              <p><strong>Antes:</strong> {{previousDate}} — {{previousTime}}</p>
+              <p><strong>Ahora:</strong> {{newDate}} — {{newTime}}</p>
+            </div>
+          </div>
+          <div class="footer">Email automático de Turnario.</div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
   getProfessionalWelcomeTemplate() {
     return `
       <!DOCTYPE html>
@@ -611,5 +884,7 @@ class EmailService {
     `;
   }
 }
+
+EmailService._singleton = null;
 
 module.exports = EmailService;

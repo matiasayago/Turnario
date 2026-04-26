@@ -1,21 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  Modal,
-  TextInput,
-  Platform,
-  Dimensions,
-} from 'react-native';
+// @ts-nocheck — componente muy grande (beta); tipar por partes
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { getBackendBaseUrl } from '../config/backend';
+import { useAppointments } from '../contexts/AppointmentContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useAvailability } from '../contexts/AvailabilityContext';
 import { useNewAppointment } from '../contexts/NewAppointmentContext';
-import { UserService } from '../services';
+import UserService from '../services/asyncStorageUserDemo.js';
+import { isProfessionalUser } from '../utils/userType';
+import CustomCalendar from './CustomCalendar';
+import FullCalendar from './FullCalendar';
+import TimeSlotSelector from './TimeSlotSelector';
 
 // Interfaz para usuarios
 interface User {
@@ -30,6 +40,7 @@ interface User {
 
 interface ConditionalScreenProps {
   screenName: string;
+  forceOpenScheduleModal?: boolean;
   children: React.ReactNode;
 }
 
@@ -1101,7 +1112,7 @@ function ProfessionalDashboardScreen() {
                 {/* Días de la semana */}
                 <View style={styles.weekDaysRow}>
                   {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day, index) => (
-                    <Text key={index} style={styles.weekDayText}>{day}</Text>
+                    <Text key={`weekday-${day}-${index}`} style={styles.weekDayText}>{day}</Text>
                   ))}
                 </View>
                 
@@ -1109,7 +1120,7 @@ function ProfessionalDashboardScreen() {
                 <View style={styles.daysGrid}>
                   {getDaysInMonth(selectedDate).map((day, index) => (
                     <TouchableOpacity
-                      key={index}
+                      key={`day-${day.day}-${index}`}
                       style={[
                         styles.dayButton,
                         day.isCurrentMonth && styles.dayButtonCurrentMonth,
@@ -1635,7 +1646,7 @@ function ProfessionalDashboardScreen() {
                 <View style={styles.searchSuggestionsContainer}>
                   {patientSearchSuggestions.map((suggestion, index) => (
                     <TouchableOpacity
-                      key={index}
+                      key={`suggestion-${suggestion}-${index}`}
                       style={styles.searchSuggestionItem}
                       onPress={() => handleSearchSuggestion(suggestion)}
                     >
@@ -1881,9 +1892,80 @@ function ProfessionalDashboardScreen() {
   );
 }
 
+/** Normaliza fecha de cita a YYYY-MM-DD (local). */
+function appointmentDateToYmd(dateStr: string): string {
+  if (!dateStr) return '';
+  const head = String(dateStr).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (head) return head[1];
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Función para generar horarios por defecto
+const generateDefaultSchedule = () => {
+  return {
+    monday: {
+      morning: { '08:00': true, '09:00': true, '10:00': true, '11:00': true, '12:00': true },
+      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true, '18:00': true },
+      evening: { '19:00': false, '20:00': false, '21:00': false }
+    },
+    tuesday: {
+      morning: { '08:00': true, '09:00': true, '10:00': true, '11:00': true, '12:00': true },
+      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true, '18:00': true },
+      evening: { '19:00': false, '20:00': false, '21:00': false }
+    },
+    wednesday: {
+      morning: { '08:00': true, '09:00': true, '10:00': true, '11:00': true, '12:00': true },
+      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true, '18:00': true },
+      evening: { '19:00': false, '20:00': false, '21:00': false }
+    },
+    thursday: {
+      morning: { '08:00': true, '09:00': true, '10:00': true, '11:00': true, '12:00': true },
+      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true, '18:00': true },
+      evening: { '19:00': false, '20:00': false, '21:00': false }
+    },
+    friday: {
+      morning: { '08:00': true, '09:00': true, '10:00': true, '11:00': true, '12:00': true },
+      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true, '18:00': true },
+      evening: { '19:00': false, '20:00': false, '21:00': false }
+    },
+    saturday: {
+      morning: { '09:00': true, '10:00': true, '11:00': true, '12:00': true },
+      afternoon: { '14:00': true, '15:00': true, '16:00': true },
+      evening: { '17:00': false, '18:00': false, '19:00': false }
+    },
+    sunday: {
+      morning: { '09:00': false, '10:00': false, '11:00': false, '12:00': false },
+      afternoon: { '14:00': false, '15:00': false, '16:00': false },
+      evening: { '17:00': false, '18:00': false, '19:00': false }
+    },
+  };
+};
+
 // Pantalla de Horarios Profesional
-function ProfessionalScheduleScreen() {
+function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceOpenScheduleModal?: boolean }) {
   const { user, toggleUserType } = useAuth();
+  const params = useLocalSearchParams<{ manageSchedule?: string }>();
+  const router = useRouter();
+  const {
+    syncFromScheduleData,
+    syncWithBackend,
+    getAvailabilityByProfessional,
+    isTimeSlotBlocked,
+    getAvailableTimeSlots,
+  } = useAvailability();
+  const {
+    appointments,
+    refreshAppointments,
+    confirmAppointment,
+    rejectAppointment,
+    cancelAppointmentAsProfessional,
+    rescheduleAppointmentAsProfessional,
+  } = useAppointments();
   const [refreshing, setRefreshing] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showAddScheduleModal, setShowAddScheduleModal] = useState(false);
@@ -1896,100 +1978,447 @@ function ProfessionalScheduleScreen() {
     endTime: '10:00',
     isAvailable: true,
   });
-  const [weeklySchedule, setWeeklySchedule] = useState({
-    monday: {
-      morning: { '09:00': true, '10:00': true, '11:00': true, '12:00': true },
-      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true },
-      evening: { '18:00': false, '19:00': false, '20:00': false, '21:00': false }
-    },
-    tuesday: {
-      morning: { '09:00': true, '10:00': true, '11:00': true, '12:00': true },
-      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true },
-      evening: { '18:00': false, '19:00': false, '20:00': false, '21:00': false }
-    },
-    wednesday: {
-      morning: { '09:00': true, '10:00': true, '11:00': true, '12:00': true },
-      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true },
-      evening: { '18:00': false, '19:00': false, '20:00': false, '21:00': false }
-    },
-    thursday: {
-      morning: { '09:00': true, '10:00': true, '11:00': true, '12:00': true },
-      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true },
-      evening: { '18:00': false, '19:00': false, '20:00': false, '21:00': false }
-    },
-    friday: {
-      morning: { '09:00': true, '10:00': true, '11:00': true, '12:00': true },
-      afternoon: { '14:00': true, '15:00': true, '16:00': true, '17:00': true },
-      evening: { '18:00': false, '19:00': false, '20:00': false, '21:00': false }
-    },
-    saturday: {
-      morning: { '09:00': false, '10:00': false, '11:00': false, '12:00': false },
-      afternoon: { '14:00': false, '15:00': false, '16:00': false, '17:00': false },
-      evening: { '18:00': false, '19:00': false, '20:00': false, '21:00': false }
-    },
-    sunday: {
-      morning: { '09:00': false, '10:00': false, '11:00': false, '12:00': false },
-      afternoon: { '14:00': false, '15:00': false, '16:00': false, '17:00': false },
-      evening: { '18:00': false, '19:00': false, '20:00': false, '21:00': false }
-    },
-  });
-  const [pendingAppointments, setPendingAppointments] = useState([
-    {
-      id: '1',
-      patientName: 'María González',
-      service: 'Consulta Psicológica',
-      date: '2024-01-15',
-      time: '15:00 - 16:00',
-      patientPhone: '+1234567890',
-      patientEmail: 'maria.gonzalez@email.com',
-      notes: 'Primera consulta, paciente refiere ansiedad y estrés laboral',
-    },
-    {
-      id: '2',
-      patientName: 'Carlos Ruiz',
-      service: 'Consulta Psicológica',
-      date: '2024-01-16',
-      time: '10:00 - 11:00',
-      patientPhone: '+1234567891',
-      patientEmail: 'carlos.ruiz@email.com',
-      notes: 'Seguimiento de terapia para depresión',
-    },
-    {
-      id: '3',
-      patientName: 'Ana Martínez',
-      service: 'Consulta Psicológica',
-      date: '2024-01-17',
-      time: '14:00 - 15:00',
-      patientPhone: '+1234567892',
-      patientEmail: 'ana.martinez@email.com',
-      notes: 'Nueva paciente, evaluación inicial',
-    },
-    {
-      id: '4',
-      patientName: 'Luis Rodríguez',
-      service: 'Consulta Psicológica',
-      date: '2024-01-18',
-      time: '11:00 - 12:00',
-      patientPhone: '+1234567893',
-      patientEmail: 'luis.rodriguez@email.com',
-      notes: 'Seguimiento de terapia familiar',
-    },
-    {
-      id: '5',
-      patientName: 'Patricia López',
-      service: 'Consulta Psicológica',
-      date: '2024-01-19',
-      time: '16:00 - 17:00',
-      patientPhone: '+1234567894',
-      patientEmail: 'patricia.lopez@email.com',
-      notes: 'Consulta de seguimiento mensual',
-    },
+  const [weeklySchedule, setWeeklySchedule] = useState(generateDefaultSchedule());
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
+  const [hasCustomSchedule, setHasCustomSchedule] = useState(false);
+  
+  // Estados para el calendario con datos de BD
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [dateSchedules, setDateSchedules] = useState<{ [date: string]: any }>({});
+  const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
+  const [defaultTimeRanges, setDefaultTimeRanges] = useState([
+    { start: '09:00', end: '12:00' },
+    { start: '14:00', end: '18:00' },
   ]);
+  const [replicateDays, setReplicateDays] = useState({
+    sunday: false,
+    monday: true,
+    tuesday: true,
+    wednesday: true,
+    thursday: true,
+    friday: true,
+    saturday: false,
+  });
+  const [replicateScopeWeeks, setReplicateScopeWeeks] = useState(8);
+  const [overwriteDatesWithSchedule, setOverwriteDatesWithSchedule] = useState(false);
+  const [appointmentDuration, setAppointmentDuration] = useState(60);
+  const [maxAppointmentsPerDay, setMaxAppointmentsPerDay] = useState(20);
+  const [advanceBookingDays, setAdvanceBookingDays] = useState(30);
+  const [breakStart, setBreakStart] = useState('12:00');
+  const [breakEnd, setBreakEnd] = useState('14:00');
+  const [isSavingBatch, setIsSavingBatch] = useState(false);
+
+  const shouldOpenScheduleFromSettings = useMemo(() => {
+    const raw = params?.manageSchedule;
+    if (Array.isArray(raw)) {
+      return raw.some((v) => v === '1' || v === 'true');
+    }
+    return raw === '1' || raw === 'true';
+  }, [params?.manageSchedule]);
+
+  useEffect(() => {
+    if (shouldOpenScheduleFromSettings || forceOpenScheduleModal) {
+      setShowScheduleModal(true);
+    }
+  }, [shouldOpenScheduleFromSettings, forceOpenScheduleModal]);
+
+  const closeScheduleModal = () => {
+    setShowScheduleModal(false);
+    try {
+      if (shouldOpenScheduleFromSettings || forceOpenScheduleModal) {
+        router.replace('/(tabs)/settings' as never);
+      } else {
+        router.back();
+      }
+    } catch {
+      router.replace('/(tabs)/settings' as never);
+    }
+  };
+
+  const professionalUid = useMemo(
+    () => String(user?._id || user?.id || user?.userId || '').trim(),
+    [user?._id, user?.id, user?.userId]
+  );
+
+  const appointmentsByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (!professionalUid) return map;
+    for (const a of appointments) {
+      if (a.status === 'cancelled') continue;
+      const pid = String(a.professionalId || '').trim();
+      if (pid && pid !== professionalUid) continue;
+      const key = appointmentDateToYmd(a.date);
+      if (!key) continue;
+      map[key] = (map[key] || 0) + 1;
+    }
+    return map;
+  }, [appointments, professionalUid]);
+
+  const sortProAppointments = (list: typeof appointments) =>
+    [...list].sort((a, b) => {
+      try {
+        const tsa = String(a.time || '').split('-')[0].trim();
+        const tsb = String(b.time || '').split('-')[0].trim();
+        const dateA = a.date?.includes('-')
+          ? new Date(`${a.date}T${tsa || '00:00'}`)
+          : new Date(`${a.date} ${tsa}`);
+        const dateB = b.date?.includes('-')
+          ? new Date(`${b.date}T${tsb || '00:00'}`)
+          : new Date(`${b.date} ${tsb}`);
+        return dateA.getTime() - dateB.getTime();
+      } catch {
+        return 0;
+      }
+    });
+
+  const pendingApprovalAppointments = useMemo(() => {
+    if (!professionalUid) return [];
+    const list = appointments.filter(
+      (a) =>
+        String(a.professionalId || '').trim() === professionalUid &&
+        (a.status === 'pending' || a.status === 'pending_approval')
+    );
+    return sortProAppointments(list);
+  }, [appointments, professionalUid]);
+
+  const confirmedActiveAppointments = useMemo(() => {
+    if (!professionalUid) return [];
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const list = appointments.filter((a) => {
+      if (String(a.professionalId || '').trim() !== professionalUid) return false;
+      if (a.status !== 'confirmed' && a.status !== 'pending_payment') return false;
+      const ymd = appointmentDateToYmd(a.date);
+      if (!ymd) return true;
+      const d = new Date(`${ymd}T12:00:00`);
+      d.setHours(0, 0, 0, 0);
+      return d >= now;
+    });
+    return sortProAppointments(list);
+  }, [appointments, professionalUid]);
+
+  const [showGhRescheduleModal, setShowGhRescheduleModal] = useState(false);
+  const [ghRescheduleTarget, setGhRescheduleTarget] = useState(null);
+  const [ghRescheduleDate, setGhRescheduleDate] = useState('');
+  const [ghRescheduleTime, setGhRescheduleTime] = useState('');
+  const [ghRescheduleMarkedDates, setGhRescheduleMarkedDates] = useState({});
+
+  const loadGhRescheduleMarkedDates = async (professionalId: string) => {
+    try {
+      const isMongoId = /^[a-fA-F0-9]{24}$/.test(String(professionalId).trim());
+      if (!isMongoId) {
+        setGhRescheduleMarkedDates({});
+        return;
+      }
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const base = getBackendBaseUrl();
+      const url = `${base}/api/v1/date-schedules/${professionalId}/month/${year}/${month}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        setGhRescheduleMarkedDates({});
+        return;
+      }
+      const data = await response.json();
+      const next: Record<string, unknown> = {};
+      if (data.success && data.data && data.data.length > 0) {
+        data.data.forEach((schedule: { date?: string; timeSlots?: string[]; isAvailable?: boolean }) => {
+          const d = schedule.date;
+          if (
+            d &&
+            schedule.timeSlots &&
+            schedule.timeSlots.length > 0 &&
+            schedule.isAvailable !== false
+          ) {
+            next[d] = {
+              marked: true,
+              selected: false,
+              selectedColor: '#4CAF50',
+              dotColor: '#4CAF50',
+            };
+          }
+        });
+      }
+      setGhRescheduleMarkedDates(next);
+    } catch {
+      setGhRescheduleMarkedDates({});
+    }
+  };
+
+  const closeGhRescheduleModal = () => {
+    setShowGhRescheduleModal(false);
+    setGhRescheduleTarget(null);
+    setGhRescheduleDate('');
+    setGhRescheduleTime('');
+    setGhRescheduleMarkedDates({});
+  };
+
+  const openGhReschedule = async (apt: any) => {
+    setGhRescheduleTarget(apt);
+    setGhRescheduleDate(appointmentDateToYmd(apt.date) || String(apt.date || ''));
+    const ts = String(apt.time || '').split('-')[0].trim() || String(apt.time || '');
+    setGhRescheduleTime(ts);
+    await loadGhRescheduleMarkedDates(professionalUid);
+    setShowGhRescheduleModal(true);
+  };
+
+  const confirmGhReschedule = async () => {
+    if (!ghRescheduleTarget?.id) return;
+    const r = await rescheduleAppointmentAsProfessional(
+      ghRescheduleTarget.id,
+      ghRescheduleDate,
+      ghRescheduleTime
+    );
+    if (!r.ok) {
+      Alert.alert('No se pudo reprogramar', r.message || 'Intentá de nuevo.');
+      return;
+    }
+    Alert.alert('Listo', 'Cita reprogramada. El paciente recibirá una notificación.');
+    closeGhRescheduleModal();
+  };
+
+  const handleGhCancelConfirmed = (apt: any) => {
+    Alert.alert(
+      'Cancelar cita',
+      '¿Confirmás la cancelación? El paciente recibirá una notificación.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            const r = await cancelAppointmentAsProfessional(apt.id);
+            if (!r.ok) {
+              Alert.alert('Error', r.message || 'No se pudo cancelar.');
+              return;
+            }
+            Alert.alert('Cita cancelada', 'Se notificó al paciente.');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOverviewDayPress = (dateStr: string) => {
+    const dayAppointments = appointments.filter((a) => {
+      if (a.status === 'cancelled') return false;
+      return appointmentDateToYmd(a.date) === dateStr;
+    });
+
+    const apptLines =
+      dayAppointments.length > 0
+        ? dayAppointments.map(
+            (a) =>
+              `• ${a.time} — ${a.clientName || a.patientName || 'Cliente'} (${a.service})`
+          )
+        : ['• Sin citas este día'];
+
+    const sched = dateSchedules[dateStr];
+    let slotLines: string[] = [];
+    if (sched?.timeSlots?.length) {
+      slotLines = sched.timeSlots
+        .filter((s) => s && s.start && s.end)
+        .map(
+          (s) => `• ${s.start}–${s.end}${s.isCustom ? ' (personalizado)' : ''}`
+        );
+    } else if (professionalUid) {
+      const slots = getAvailableTimeSlots(
+        professionalUid,
+        new Date(`${dateStr}T12:00:00`)
+      );
+      slotLines =
+        slots.length > 0
+          ? slots.map((t) => `• ${t}`)
+          : ['• Franjas según horario semanal (sin detalle por hora en este día)'];
+    } else {
+      slotLines = ['• —'];
+    }
+
+    const message = ['Citas', ...apptLines, '', 'Franjas / disponibilidad', ...slotLines].join(
+      '\n'
+    );
+    Alert.alert(dateStr, message);
+  };
+
+  // Cargar horarios desde el backend al inicializar
+  useEffect(() => {
+    if (!professionalUid) {
+      setIsLoadingSchedule(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadScheduleFromBackend = async () => {
+      try {
+        setIsLoadingSchedule(true);
+        console.log('🔄 Cargando horarios desde backend...');
+
+        const synced = await syncWithBackend(professionalUid);
+        const availability =
+          synced ?? getAvailabilityByProfessional(professionalUid);
+
+        if (cancelled) return;
+
+        if (availability && availability.timeSlots && availability.timeSlots.length > 0) {
+          console.log('✅ Horarios encontrados en backend, convirtiendo...');
+          const convertedSchedule = convertAvailabilityToSchedule(availability);
+          setWeeklySchedule(convertedSchedule);
+          setHasCustomSchedule(true);
+          console.log('✅ Horarios cargados desde backend');
+        } else {
+          console.log('ℹ️ No hay horarios configurados, usando valores por defecto');
+          setHasCustomSchedule(false);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('❌ Error cargando horarios:', error);
+        console.log('ℹ️ Usando horarios por defecto debido al error');
+        setHasCustomSchedule(false);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingSchedule(false);
+        }
+      }
+    };
+
+    loadScheduleFromBackend();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [professionalUid]);
+
+  // Cargar horarios por fecha desde la base de datos
+  const loadDateSchedulesFromDB = async (month: number, year: number) => {
+    if (!professionalUid) return;
+
+    setIsLoadingCalendar(true);
+    try {
+      const base = getBackendBaseUrl();
+      console.log(`📅 Cargando horarios por fecha para ${month}/${year} - Usuario: ${professionalUid} → ${base}`);
+
+      const response = await fetch(
+        `${base}/api/v1/date-schedules/${professionalUid}/month/${year}/${month}`
+      );
+      
+      console.log(`📅 Respuesta del servidor: ${response.status} ${response.statusText}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Datos recibidos del servidor:', data);
+        
+        if (data.success && data.data && Array.isArray(data.data)) {
+          console.log(`📅 Total de horarios encontrados: ${data.data.length}`);
+          
+          // Convertir array a objeto para FullCalendar
+          const schedulesObject: { [date: string]: any } = {};
+          data.data.forEach((schedule: any) => {
+            console.log(`📅 Procesando horario para fecha: ${schedule.date}`, schedule);
+            schedulesObject[schedule.date] = schedule;
+          });
+          
+          setDateSchedules(schedulesObject);
+          
+          // Extraer fechas con horarios para mostrar en el calendario
+          const datesWithSchedules = data.data
+            .filter((schedule: any) => {
+              const hasTimeSlots = schedule.timeSlots && schedule.timeSlots.length > 0;
+              const isAvailable = schedule.isAvailable !== false;
+              console.log(`📅 Fecha ${schedule.date}: hasTimeSlots=${hasTimeSlots}, isAvailable=${isAvailable}`);
+              return hasTimeSlots && isAvailable;
+            })
+            .map((schedule: any) => schedule.date);
+          
+          setSelectedDates(datesWithSchedules);
+          console.log('📅 Fechas marcadas como disponibles:', datesWithSchedules);
+          console.log('📅 Objeto de horarios:', schedulesObject);
+        } else {
+          console.log('⚠️ No hay datos válidos en la respuesta');
+          setDateSchedules({});
+          setSelectedDates([]);
+        }
+      } else {
+        console.log(`⚠️ Error del servidor: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.log('📅 Detalles del error:', errorText);
+        setDateSchedules({});
+        setSelectedDates([]);
+      }
+    } catch (error) {
+      console.error('❌ Error cargando horarios por fecha:', error);
+      setDateSchedules({});
+      setSelectedDates([]);
+    } finally {
+      setIsLoadingCalendar(false);
+    }
+  };
+
+  // Cargar horarios del mes actual al inicializar
+  useEffect(() => {
+    if (!professionalUid) return;
+    const currentDate = new Date();
+    loadDateSchedulesFromDB(currentDate.getMonth() + 1, currentDate.getFullYear());
+  }, [professionalUid]);
+
+  // Función para convertir disponibilidad del backend al formato de horarios
+  const convertAvailabilityToSchedule = (availability) => {
+    const schedule = generateDefaultSchedule();
+    
+    // Mapear días de la semana
+    const dayMapping = {
+      monday: 'monday',
+      tuesday: 'tuesday', 
+      wednesday: 'wednesday',
+      thursday: 'thursday',
+      friday: 'friday',
+      saturday: 'saturday',
+      sunday: 'sunday'
+    };
+    
+    // Aplicar configuración de días disponibles
+    Object.entries(availability.daysOfWeek).forEach(([day, isAvailable]) => {
+      if (dayMapping[day] && !isAvailable) {
+        // Si el día no está disponible, desactivar todos los horarios
+        Object.keys(schedule[dayMapping[day]]).forEach(period => {
+          Object.keys(schedule[dayMapping[day]][period]).forEach(time => {
+            schedule[dayMapping[day]][period][time] = false;
+          });
+        });
+      }
+    });
+    
+    // Aplicar horarios específicos
+    availability.timeSlots.forEach(timeSlot => {
+      Object.keys(schedule).forEach(day => {
+        if (availability.daysOfWeek[day]) {
+          Object.keys(schedule[day]).forEach(period => {
+            if (schedule[day][period].hasOwnProperty(timeSlot)) {
+              schedule[day][period][timeSlot] = true;
+            }
+          });
+        }
+      });
+    });
+    
+    return schedule;
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    try {
+      await refreshAppointments();
+      if (professionalUid) {
+        await loadDateSchedulesFromDB(
+          currentCalendarMonth.getMonth() + 1,
+          currentCalendarMonth.getFullYear()
+        );
+      }
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   // Función para agregar un nuevo horario
@@ -2074,17 +2503,30 @@ function ProfessionalScheduleScreen() {
   ];
 
   const handleAcceptAppointment = (appointmentId: string) => {
-    setPendingAppointments(prev => 
-      prev.filter(app => app.id !== appointmentId)
-    );
-    console.log('Cita aceptada:', appointmentId);
+    Alert.alert('Aceptar cita', '¿Confirmás esta reserva?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Aceptar',
+        onPress: async () => {
+          await confirmAppointment(appointmentId);
+          Alert.alert('Listo', 'La cita quedó confirmada.');
+        },
+      },
+    ]);
   };
 
   const handleRejectAppointment = (appointmentId: string) => {
-    setPendingAppointments(prev => 
-      prev.filter(app => app.id !== appointmentId)
-    );
-    console.log('Cita rechazada:', appointmentId);
+    Alert.alert('Rechazar cita', '¿Rechazás esta solicitud?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Rechazar',
+        style: 'destructive',
+        onPress: async () => {
+          await rejectAppointment(appointmentId);
+          Alert.alert('Listo', 'La solicitud fue rechazada.');
+        },
+      },
+    ]);
   };
 
   const toggleTimeSlot = (day: string, timeSlot: string, hour: string) => {
@@ -2100,10 +2542,162 @@ function ProfessionalScheduleScreen() {
     }));
   };
 
-  const saveSchedule = () => {
-    console.log('Horario guardado:', weeklySchedule);
-    setShowScheduleModal(false);
-    Alert.alert('Éxito', 'Horario actualizado correctamente');
+  // Funciones para manejar el calendario
+  const handleDateSelect = (date: string) => {
+    console.log('📅 Fecha seleccionada:', date);
+    setSelectedDates(prev => [...prev, date]);
+  };
+
+  const handleDateDeselect = (date: string) => {
+    console.log('📅 Fecha deseleccionada:', date);
+    setSelectedDates(prev => prev.filter(d => d !== date));
+  };
+
+  const handleMonthChange = (newMonth: Date) => {
+    console.log('📅 Cambiando mes:', newMonth);
+    setCurrentCalendarMonth(newMonth);
+    loadDateSchedulesFromDB(newMonth.getMonth() + 1, newMonth.getFullYear());
+  };
+
+  const handleDateScheduleEdit = async (
+    date: string,
+    schedule: any,
+    options?: { silent?: boolean; skipReload?: boolean }
+  ) => {
+    if (!professionalUid) return;
+
+    try {
+      console.log('📅 Editando horarios para fecha:', date, schedule);
+
+      const base = getBackendBaseUrl();
+      const response = await fetch(`${base}/api/v1/date-schedules/${professionalUid}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          date,
+          timeSlots: schedule.timeSlots || [],
+          isAvailable: schedule.isAvailable !== false,
+          notes: schedule.notes || '',
+          professionalName: user.fullName || user.email,
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Horarios guardados:', result);
+        if (!options?.skipReload) {
+          loadDateSchedulesFromDB(
+            currentCalendarMonth.getMonth() + 1,
+            currentCalendarMonth.getFullYear()
+          );
+        }
+        if (!options?.silent) {
+          Alert.alert('Éxito', 'Horarios guardados correctamente');
+        }
+      } else {
+        throw new Error('Error guardando horarios');
+      }
+    } catch (error) {
+      console.error('❌ Error guardando horarios:', error);
+      if (!options?.silent) {
+        Alert.alert('Error', 'No se pudieron guardar los horarios');
+      }
+      throw error;
+    }
+  };
+
+  const formatDateYmd = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const addHours = (hhmm: string, delta: number) => {
+    const [h, m] = String(hhmm || '00:00').split(':').map((v) => parseInt(v, 10) || 0);
+    const total = Math.max(0, Math.min(23 * 60 + 59, h * 60 + m + delta * 60));
+    const nextH = String(Math.floor(total / 60)).padStart(2, '0');
+    const nextM = String(total % 60).padStart(2, '0');
+    return `${nextH}:${nextM}`;
+  };
+
+  const getDefaultTimeSlots = () =>
+    defaultTimeRanges
+      .filter((r) => r.start && r.end)
+      .map((r) => ({ start: r.start, end: r.end, isCustom: false }));
+
+  const saveAllSelectedDates = async () => {
+    if (!selectedDates.length) {
+      Alert.alert('Sin fechas', 'Seleccioná al menos una fecha.');
+      return;
+    }
+    if (isSavingBatch) return;
+    setIsSavingBatch(true);
+    const slots = getDefaultTimeSlots();
+    let saved = 0;
+    try {
+      for (const date of selectedDates) {
+        await handleDateScheduleEdit(
+          date,
+          {
+            timeSlots: slots,
+            isAvailable: true,
+            notes: '',
+          },
+          { silent: true, skipReload: true }
+        );
+        saved += 1;
+      }
+      await loadDateSchedulesFromDB(
+        currentCalendarMonth.getMonth() + 1,
+        currentCalendarMonth.getFullYear()
+      );
+      Alert.alert('✅ Horarios guardados', `Se guardaron ${saved} fechas.`);
+    } catch {
+      Alert.alert('Error', `Se guardaron ${saved} fechas antes de un error. Intentá de nuevo.`);
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  const applyTemplateToCalendar = () => {
+    const enabledDays = new Set(
+      Object.entries(replicateDays)
+        .filter(([, enabled]) => enabled)
+        .map(([day]) => day)
+    );
+    const mapJsDay: Record<string, number> = {
+      sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+    };
+    const targetJsDays = new Set(
+      Object.keys(mapJsDay).filter((k) => enabledDays.has(k)).map((k) => mapJsDay[k])
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    end.setDate(today.getDate() + replicateScopeWeeks * 7);
+
+    const generated: string[] = [];
+    for (let d = new Date(today); d <= end; d.setDate(d.getDate() + 1)) {
+      if (targetJsDays.has(d.getDay())) {
+        generated.push(formatDateYmd(d));
+      }
+    }
+
+    setSelectedDates((prev) => {
+      const next = overwriteDatesWithSchedule ? generated : Array.from(new Set([...prev, ...generated]));
+      return next.sort();
+    });
+    Alert.alert('✅ Plantilla aplicada', `Se actualizaron ${generated.length} fechas del calendario.`);
   };
 
   const getDayName = (day: string) => {
@@ -2145,71 +2739,186 @@ function ProfessionalScheduleScreen() {
       }
     >
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Gestión de Horarios</Text>
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>Gestión de Horarios</Text>
+          {isLoadingSchedule ? (
+            <View style={styles.statusIndicator}>
+              <ActivityIndicator size="small" color="#667eea" />
+              <Text style={styles.statusText}>Cargando...</Text>
+            </View>
+          ) : hasCustomSchedule ? (
+            <View style={[styles.statusIndicator, styles.customSchedule]}>
+              <Ionicons name="checkmark-circle" size={16} color="#4caf50" />
+              <Text style={[styles.statusText, styles.customText]}>Personalizado</Text>
+            </View>
+          ) : (
+            <View style={[styles.statusIndicator, styles.defaultSchedule]}>
+              <Ionicons name="time-outline" size={16} color="#ff9800" />
+              <Text style={[styles.statusText, styles.defaultText]}>Por defecto</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.headerSubtitle}>Configura tu disponibilidad</Text>
       </View>
 
-      {/* Sección de Citas Pendientes */}
-      {pendingAppointments.length > 0 && (
-        <View style={styles.pendingSection}>
-          <Text style={styles.sectionTitle}>Citas Pendientes de Aprobación</Text>
-          <Text style={styles.sectionSubtitle}>
-            {pendingAppointments.length} cita{pendingAppointments.length !== 1 ? 's' : ''} esperando tu respuesta
-          </Text>
-          
-          {pendingAppointments.map((appointment) => (
-            <View key={appointment.id} style={styles.pendingCard}>
-              <View style={styles.pendingHeader}>
-                <View style={styles.pendingInfo}>
-                  <Text style={styles.patientName}>{appointment.patientName}</Text>
-                  <Text style={styles.serviceName}>{appointment.service}</Text>
-                  <Text style={styles.pendingAppointmentTime}>
-                    {appointment.date} • {appointment.time}
-                  </Text>
-                </View>
-                <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>Pendiente</Text>
-                </View>
+      <View style={styles.scheduleSection}>
+        <Text style={styles.scheduleSectionTitle}>Vista de agenda</Text>
+        <Text style={styles.scheduleSectionDescription}>
+          Mes con citas (número en el día) y disponibilidad en verde. Toca un día para ver citas y
+          franjas.
+        </Text>
+        {isLoadingCalendar ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#667eea" />
+            <Text style={styles.loadingText}>Cargando calendario...</Text>
+          </View>
+        ) : (
+          <FullCalendar
+            variant="overview"
+            selectedDates={[]}
+            onDateSelect={() => {}}
+            onDateDeselect={() => {}}
+            currentMonth={currentCalendarMonth}
+            onMonthChange={handleMonthChange}
+            dateSchedules={dateSchedules}
+            appointmentsByDate={appointmentsByDate}
+            onOverviewDayPress={handleOverviewDayPress}
+          />
+        )}
+      </View>
+
+      {/* Citas pendientes de aprobación (datos reales) */}
+      <View style={styles.pendingSection}>
+        <Text style={styles.sectionTitle}>Citas pendientes de aprobación</Text>
+        <Text style={styles.sectionSubtitle}>
+          {pendingApprovalAppointments.length === 0
+            ? 'No hay solicitudes esperando tu respuesta.'
+            : `${pendingApprovalAppointments.length} cita${
+                pendingApprovalAppointments.length !== 1 ? 's' : ''
+              } por confirmar o rechazar`}
+        </Text>
+
+        {pendingApprovalAppointments.map((appointment) => (
+          <View key={appointment.id} style={styles.pendingCard}>
+            <View style={styles.pendingHeader}>
+              <View style={styles.pendingInfo}>
+                <Text style={styles.patientName}>
+                  {appointment.clientName || appointment.patientName || 'Paciente'}
+                </Text>
+                <Text style={styles.serviceName}>{appointment.service}</Text>
+                <Text style={styles.pendingAppointmentTime}>
+                  {appointment.date} • {appointment.time}
+                </Text>
               </View>
-              
-              <View style={styles.pendingDetails}>
-                <View style={styles.detailRow}>
-                  <Ionicons name="call" size={16} color="#666" />
-                  <Text style={styles.detailText}>{appointment.patientPhone}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Ionicons name="mail" size={16} color="#666" />
-                  <Text style={styles.detailText}>{appointment.patientEmail}</Text>
-                </View>
-                {appointment.notes && (
-                  <View style={styles.detailRow}>
-                    <Ionicons name="document-text" size={16} color="#666" />
-                    <Text style={styles.detailText}>{appointment.notes}</Text>
-                  </View>
-                )}
-              </View>
-              
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.acceptButton]}
-                  onPress={() => handleAcceptAppointment(appointment.id)}
-                >
-                  <Ionicons name="checkmark" size={20} color="white" />
-                  <Text style={styles.actionButtonText}>Aceptar</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.rejectButton]}
-                  onPress={() => handleRejectAppointment(appointment.id)}
-                >
-                  <Ionicons name="close" size={20} color="white" />
-                  <Text style={styles.actionButtonText}>Rechazar</Text>
-                </TouchableOpacity>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>
+                  {appointment.status === 'pending_approval' ? 'Por aprobar' : 'Pendiente'}
+                </Text>
               </View>
             </View>
-          ))}
-        </View>
-      )}
+
+            <View style={styles.pendingDetails}>
+              {(appointment.patientPhone || appointment.clientPhone) && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="call" size={16} color="#666" />
+                  <Text style={styles.detailText}>
+                    {appointment.patientPhone || appointment.clientPhone || '—'}
+                  </Text>
+                </View>
+              )}
+              {(appointment.patientEmail || appointment.clientEmail) && (
+                <View style={styles.detailRow}>
+                  <Ionicons name="mail" size={16} color="#666" />
+                  <Text style={styles.detailText}>
+                    {appointment.patientEmail || appointment.clientEmail || '—'}
+                  </Text>
+                </View>
+              )}
+              {appointment.notes ? (
+                <View style={styles.detailRow}>
+                  <Ionicons name="document-text" size={16} color="#666" />
+                  <Text style={styles.detailText}>{appointment.notes}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.acceptButton]}
+                onPress={() => handleAcceptAppointment(appointment.id)}
+              >
+                <Ionicons name="checkmark" size={20} color="white" />
+                <Text style={styles.actionButtonText}>Aceptar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.rejectButton]}
+                onPress={() => handleRejectAppointment(appointment.id)}
+              >
+                <Ionicons name="close" size={20} color="white" />
+                <Text style={styles.actionButtonText}>Rechazar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {/* Citas confirmadas (hoy o futuras): cancelar / reprogramar */}
+      <View style={styles.pendingSection}>
+        <Text style={styles.sectionTitle}>Citas confirmadas</Text>
+        <Text style={styles.sectionSubtitle}>
+          {confirmedActiveAppointments.length === 0
+            ? 'No tenés turnos confirmados a partir de hoy.'
+            : `${confirmedActiveAppointments.length} turno${
+                confirmedActiveAppointments.length !== 1 ? 's' : ''
+              } activo${confirmedActiveAppointments.length !== 1 ? 's' : ''}`}
+        </Text>
+
+        {confirmedActiveAppointments.map((appointment) => (
+          <View key={appointment.id} style={styles.confirmedAgendaCard}>
+            <View style={styles.pendingHeader}>
+              <View style={styles.pendingInfo}>
+                <Text style={styles.patientName}>
+                  {appointment.clientName || appointment.patientName || 'Paciente'}
+                </Text>
+                <Text style={styles.serviceName}>{appointment.service}</Text>
+                <Text style={styles.pendingAppointmentTime}>
+                  {appointment.date} • {appointment.time}
+                </Text>
+              </View>
+              <View style={[styles.statusBadge, styles.confirmedAgendaBadge]}>
+                <Text style={styles.statusText}>
+                  {appointment.status === 'pending_payment' ? 'Pago pendiente' : 'Confirmada'}
+                </Text>
+              </View>
+            </View>
+            {appointment.notes ? (
+              <View style={styles.pendingDetails}>
+                <View style={styles.detailRow}>
+                  <Ionicons name="document-text" size={16} color="#666" />
+                  <Text style={styles.detailText}>{appointment.notes}</Text>
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.ghManageRow}>
+              <TouchableOpacity
+                style={[styles.ghManageBtn, styles.ghRescheduleBtn]}
+                onPress={() => openGhReschedule(appointment)}
+              >
+                <Ionicons name="calendar-outline" size={18} color="#e65100" />
+                <Text style={styles.ghRescheduleBtnText}>Reprogramar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.ghManageBtn, styles.ghCancelBtn]}
+                onPress={() => handleGhCancelConfirmed(appointment)}
+              >
+                <Ionicons name="close-circle-outline" size={18} color="#c62828" />
+                <Text style={styles.ghCancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </View>
 
       <View style={styles.actionsSection}>
         <TouchableOpacity 
@@ -2227,99 +2936,241 @@ function ProfessionalScheduleScreen() {
           <Ionicons name="settings" size={20} color="#667eea" />
           <Text style={styles.secondaryButtonText}>Configurar Horarios</Text>
         </TouchableOpacity>
+        
+        {hasCustomSchedule && (
+          <TouchableOpacity 
+            style={styles.resetButton} 
+            onPress={() => {
+              Alert.alert(
+                'Restablecer Horarios',
+                '¿Estás seguro de que quieres restablecer a los horarios por defecto?',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { 
+                    text: 'Restablecer', 
+                    style: 'destructive',
+                    onPress: () => {
+                      setWeeklySchedule(generateDefaultSchedule());
+                      setHasCustomSchedule(false);
+                      Alert.alert('Éxito', 'Horarios restablecidos a valores por defecto');
+                    }
+                  }
+                ]
+              );
+            }}
+          >
+            <Ionicons name="refresh-outline" size={20} color="#ff9800" />
+            <Text style={styles.resetButtonText}>Restablecer por Defecto</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Modal para gestionar horarios */}
+      {/* Modal para gestionar horarios - formato clásico 20/04 */}
       <Modal
         visible={showScheduleModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="fullScreen"
+        onRequestClose={closeScheduleModal}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Gestionar Horarios Semanales</Text>
+        <View style={{ flex: 1, backgroundColor: '#f5f6fb' }}>
+          <View style={{ backgroundColor: '#667eea', paddingTop: 50, paddingHorizontal: 16, paddingBottom: 12 }}>
             <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowScheduleModal(false)}
+              onPress={closeScheduleModal}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={{ position: 'absolute', left: 12, top: 52, padding: 8, zIndex: 20 }}
             >
-              <Ionicons name="close" size={24} color="#666" />
+              <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center' }}>⏰ Gestión de Horarios</Text>
           </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#222', marginBottom: 6 }}>📅 Seleccionar Fechas Disponibles</Text>
+              <Text style={{ fontSize: 16, color: '#6b7280', marginBottom: 12 }}>
+                Solo las fechas que marques aquí (y guardes con horarios) aparecen como disponibles en el calendario de reservas de los clientes.
+              </Text>
+              {isLoadingCalendar ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#667eea" />
+                  <Text style={styles.loadingText}>Cargando horarios...</Text>
+                </View>
+              ) : (
+                <FullCalendar
+                  selectedDates={selectedDates}
+                  onDateSelect={handleDateSelect}
+                  onDateDeselect={handleDateDeselect}
+                  currentMonth={currentCalendarMonth}
+                  onMonthChange={handleMonthChange}
+                  onDateScheduleEdit={handleDateScheduleEdit}
+                  dateSchedules={dateSchedules}
+                />
+              )}
+            </View>
 
-          <ScrollView style={styles.modalContent}>
-            {Object.entries(weeklySchedule).map(([day, timeSlots]) => (
-              <View key={day} style={styles.dayScheduleCard}>
-                <Text style={styles.dayScheduleTitle}>{getDayName(day)}</Text>
-                
-                {Object.entries(timeSlots).map(([timeSlot, hours]) => (
-                  <View key={timeSlot} style={styles.timeSlotSection}>
-                    <View style={styles.timeSlotHeader}>
-                      <Text style={styles.timeSlotTitle}>
-                        {getTimeSlotName(timeSlot)} ({getTimeRange(timeSlot)})
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.toggleAllButton}
-                        onPress={() => {
-                          const allAvailable = Object.values(hours).every(h => h);
-                          Object.keys(hours).forEach(hour => {
-                            toggleTimeSlot(day, timeSlot, hour);
-                          });
-                        }}
-                      >
-                        <Text style={styles.toggleAllText}>
-                          {Object.values(hours).every(h => h) ? 'Desactivar Todo' : 'Activar Todo'}
-                        </Text>
+            {selectedDates.length > 0 && (
+              <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 }}>
+                <Text style={{ fontSize: 22, fontWeight: '700', color: '#222', marginBottom: 10 }}>Fechas Seleccionadas:</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {selectedDates.map((date) => (
+                    <View key={date} style={{ backgroundColor: '#5f7ce8', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 }}>
+                      <Text style={{ color: '#fff', fontWeight: '700' }}>{date.slice(8)}/{parseInt(date.slice(5, 7), 10)}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#222', marginBottom: 8 }}>⏰ Horarios por Defecto</Text>
+              <Text style={{ fontSize: 16, color: '#6b7280', marginBottom: 12 }}>
+                Configura los horarios que se aplicarán a todas las fechas seleccionadas.
+              </Text>
+              {defaultTimeRanges.map((slot, idx) => (
+                <View key={`default-slot-${idx}`} style={{ marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={{ color: '#6b7280', fontWeight: '600' }}>Inicio</Text>
+                    <Text style={{ color: '#6b7280', fontWeight: '600' }}>Fin</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#f3f4ff', borderRadius: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+                      <TouchableOpacity onPress={() => setDefaultTimeRanges((prev) => prev.map((p, i) => (i === idx ? { ...p, start: addHours(p.start, -1) } : p)))} style={{ padding: 10 }}>
+                        <Ionicons name="remove" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                      <Text style={{ fontWeight: '700', color: '#1f2937' }}>{slot.start}</Text>
+                      <TouchableOpacity onPress={() => setDefaultTimeRanges((prev) => prev.map((p, i) => (i === idx ? { ...p, start: addHours(p.start, 1) } : p)))} style={{ padding: 10 }}>
+                        <Ionicons name="add" size={18} color="#667eea" />
                       </TouchableOpacity>
                     </View>
-                    
-                    <View style={styles.hoursGrid}>
-                      {Object.entries(hours).map(([hour, isAvailable]) => (
-                        <TouchableOpacity
-                          key={hour}
-                          style={[
-                            styles.hourToggle,
-                            isAvailable && styles.hourToggleActive,
-                          ]}
-                          onPress={() => toggleTimeSlot(day, timeSlot, hour)}
-                        >
-                          <Text style={[
-                            styles.hourText,
-                            isAvailable && styles.hourTextActive,
-                          ]}>
-                            {hour}
-                          </Text>
-                          <View style={[
-                            styles.hourIndicator,
-                            isAvailable && styles.hourIndicatorActive,
-                          ]}>
-                            <Ionicons
-                              name={isAvailable ? "checkmark" : "close"}
-                              size={14}
-                              color={isAvailable ? "white" : "#ccc"}
-                            />
-                          </View>
-                        </TouchableOpacity>
-                      ))}
+                    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#f3f4ff', borderRadius: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+                      <TouchableOpacity onPress={() => setDefaultTimeRanges((prev) => prev.map((p, i) => (i === idx ? { ...p, end: addHours(p.end, -1) } : p)))} style={{ padding: 10 }}>
+                        <Ionicons name="remove" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                      <Text style={{ fontWeight: '700', color: '#1f2937' }}>{slot.end}</Text>
+                      <TouchableOpacity onPress={() => setDefaultTimeRanges((prev) => prev.map((p, i) => (i === idx ? { ...p, end: addHours(p.end, 1) } : p)))} style={{ padding: 10 }}>
+                        <Ionicons name="add" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#222', marginBottom: 8 }}>📆 Replicar en semanas / meses</Text>
+              <Text style={{ fontSize: 16, color: '#6b7280', marginBottom: 12 }}>
+                Configurá los horarios por defecto arriba, elegí qué días de la semana y por cuánto tiempo.
+              </Text>
+              <Text style={{ fontWeight: '700', marginBottom: 8 }}>Días de la semana</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {[
+                  { k: 'sunday', l: 'Dom' }, { k: 'monday', l: 'Lun' }, { k: 'tuesday', l: 'Mar' },
+                  { k: 'wednesday', l: 'Mié' }, { k: 'thursday', l: 'Jue' }, { k: 'friday', l: 'Vie' }, { k: 'saturday', l: 'Sáb' },
+                ].map((d) => (
+                  <TouchableOpacity
+                    key={d.k}
+                    onPress={() => setReplicateDays((prev) => ({ ...prev, [d.k]: !prev[d.k] }))}
+                    style={{ backgroundColor: replicateDays[d.k] ? '#5f7ce8' : '#eceef4', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 }}
+                  >
+                    <Text style={{ color: replicateDays[d.k] ? '#fff' : '#555', fontWeight: '700' }}>{d.l}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={{ fontWeight: '700', marginBottom: 8 }}>Alcance desde hoy</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {[4, 8, 12, 24].map((w) => (
+                  <TouchableOpacity
+                    key={`scope-${w}`}
+                    onPress={() => setReplicateScopeWeeks(w)}
+                    style={{ borderWidth: 1.5, borderColor: replicateScopeWeeks === w ? '#5f7ce8' : '#d1d5db', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}
+                  >
+                    <Text style={{ color: '#374151', fontWeight: '700' }}>{w === 24 ? '~6 meses' : `${w} sem.`}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                onPress={() => setOverwriteDatesWithSchedule((v) => !v)}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}
+              >
+                <Text style={{ color: '#374151', flex: 1 }}>Sobrescribir días que ya tienen horario</Text>
+                <Ionicons name={overwriteDatesWithSchedule ? 'toggle' : 'toggle-outline'} size={40} color={overwriteDatesWithSchedule ? '#5f7ce8' : '#c7ccd8'} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={applyTemplateToCalendar} style={{ backgroundColor: '#49b34f', borderRadius: 12, padding: 14, alignItems: 'center' }}>
+                <Text style={{ color: '#fff', fontWeight: '800' }}>📋 Aplicar plantilla al calendario</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 }}>
+              <Text style={{ fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>⚙️ Configuración General</Text>
+              <Text style={{ fontSize: 16, color: '#6b7280', textAlign: 'center', marginBottom: 12 }}>
+                Configuración adicional para la gestión de horarios
+              </Text>
+              <View style={{ gap: 10 }}>
+                {[
+                  { label: 'Duración de Citas', value: appointmentDuration, unit: 'min', setValue: setAppointmentDuration },
+                  { label: 'Citas Máximas por Día', value: maxAppointmentsPerDay, unit: 'citas', setValue: setMaxAppointmentsPerDay },
+                  { label: 'Anticipación de Reservas', value: advanceBookingDays, unit: 'días', setValue: setAdvanceBookingDays },
+                ].map((cfg) => (
+                  <View key={cfg.label} style={{ backgroundColor: '#f8f9ff', borderRadius: 14, padding: 12 }}>
+                    <Text style={{ fontWeight: '700', marginBottom: 8 }}>{cfg.label}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                      <TouchableOpacity onPress={() => cfg.setValue(Math.max(1, cfg.value - 1))} style={{ backgroundColor: '#fff', borderRadius: 999, padding: 8 }}>
+                        <Ionicons name="remove" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                      <Text style={{ fontWeight: '800', color: '#4c63d2' }}>{cfg.value} {cfg.unit}</Text>
+                      <TouchableOpacity onPress={() => cfg.setValue(cfg.value + 1)} style={{ backgroundColor: '#fff', borderRadius: 999, padding: 8 }}>
+                        <Ionicons name="add" size={18} color="#667eea" />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 ))}
+                <View style={{ backgroundColor: '#f8f9ff', borderRadius: 14, padding: 12 }}>
+                  <Text style={{ fontWeight: '700', marginBottom: 8 }}>☕ Tiempo de Descanso</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+                      <TouchableOpacity onPress={() => setBreakStart(addHours(breakStart, -1))} style={{ padding: 10 }}>
+                        <Ionicons name="chevron-down" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                      <Text style={{ fontWeight: '700' }}>{breakStart}</Text>
+                      <TouchableOpacity onPress={() => setBreakStart(addHours(breakStart, 1))} style={{ padding: 10 }}>
+                        <Ionicons name="chevron-up" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+                      <TouchableOpacity onPress={() => setBreakEnd(addHours(breakEnd, -1))} style={{ padding: 10 }}>
+                        <Ionicons name="chevron-down" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                      <Text style={{ fontWeight: '700' }}>{breakEnd}</Text>
+                      <TouchableOpacity onPress={() => setBreakEnd(addHours(breakEnd, 1))} style={{ padding: 10 }}>
+                        <Ionicons name="chevron-up" size={18} color="#667eea" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
               </View>
-            ))}
+            </View>
           </ScrollView>
 
-          <View style={styles.modalActions}>
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eceef4', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', gap: 10 }}>
             <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => setShowScheduleModal(false)}
+              onPress={() => {
+                setSelectedDates([]);
+                setDateSchedules({});
+                setDefaultTimeRanges([{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }]);
+                setReplicateScopeWeeks(8);
+                setOverwriteDatesWithSchedule(false);
+              }}
+              style={{ flex: 1, backgroundColor: '#ff6f47', borderRadius: 999, paddingVertical: 12, alignItems: 'center' }}
             >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
+              <Text style={{ color: '#fff', fontWeight: '800' }}>⏱ Restablecer</Text>
             </TouchableOpacity>
-            
             <TouchableOpacity
-              style={[styles.modalButton, styles.saveButton]}
-              onPress={saveSchedule}
+              disabled={isSavingBatch}
+              onPress={saveAllSelectedDates}
+              style={{ flex: 1.4, backgroundColor: isSavingBatch ? '#8fa0eb' : '#5f7ce8', borderRadius: 999, paddingVertical: 12, alignItems: 'center' }}
             >
-              <Text style={styles.saveButtonText}>Guardar Horario</Text>
+              <Text style={{ color: '#fff', fontWeight: '800' }}>
+                {isSavingBatch ? '💾 Guardando...' : `💾 Guardar ${selectedDates.length} Fechas`}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2458,7 +3309,7 @@ function ProfessionalScheduleScreen() {
       <Modal
         visible={showDayPickerModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="overFullScreen"
         transparent={true}
       >
         <View style={styles.dayPickerOverlay}>
@@ -2503,7 +3354,7 @@ function ProfessionalScheduleScreen() {
       <Modal
         visible={showPeriodPickerModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="overFullScreen"
         transparent={true}
       >
         <View style={styles.dayPickerOverlay}>
@@ -2549,6 +3400,74 @@ function ProfessionalScheduleScreen() {
               ))}
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showGhRescheduleModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeGhRescheduleModal}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity style={styles.closeButton} onPress={closeGhRescheduleModal}>
+              <Ionicons name="arrow-back" size={24} color="#666" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Reprogramar cita</Text>
+            <View style={styles.closeButton} />
+          </View>
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            {ghRescheduleTarget ? (
+              <>
+                <Text style={styles.scheduleSectionDescription}>
+                  {ghRescheduleTarget.service} ·{' '}
+                  {ghRescheduleTarget.clientName || ghRescheduleTarget.patientName || 'Paciente'}
+                </Text>
+                <Text style={[styles.sectionSubtitle, { marginTop: 8 }]}>
+                  Elegí nueva fecha y hora. El paciente recibirá una notificación.
+                </Text>
+                <Text style={[styles.formLabel, { marginTop: 16 }]}>Nueva fecha</Text>
+                <CustomCalendar
+                  onDateSelect={(dateString) => {
+                    setGhRescheduleDate(dateString);
+                    setGhRescheduleTime('');
+                  }}
+                  markedDates={ghRescheduleMarkedDates}
+                  selectedDate={ghRescheduleDate}
+                />
+                <Text style={[styles.formLabel, { marginTop: 16 }]}>Hora</Text>
+                <TimeSlotSelector
+                  selectedTime={ghRescheduleTime}
+                  onTimeSelect={(t) => setGhRescheduleTime(t)}
+                  selectedDate={ghRescheduleDate}
+                  professionalId={professionalUid}
+                  clinicId={user?.clinicId || '1'}
+                  serviceId={ghRescheduleTarget.serviceId || '1'}
+                  placeholder="Seleccionar horario..."
+                />
+                <View style={[styles.actionButtons, { marginTop: 24, marginBottom: 32 }]}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.secondaryButton]}
+                    onPress={closeGhRescheduleModal}
+                  >
+                    <Text style={styles.secondaryButtonText}>Cerrar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButton,
+                      styles.acceptButton,
+                      (!ghRescheduleDate || !ghRescheduleTime) && { opacity: 0.45 },
+                    ]}
+                    disabled={!ghRescheduleDate || !ghRescheduleTime}
+                    onPress={confirmGhReschedule}
+                  >
+                    <Text style={styles.actionButtonText}>Confirmar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : null}
+          </ScrollView>
         </View>
       </Modal>
     </ScrollView>
@@ -3964,9 +4883,9 @@ function ProfessionalPatientsScreen() {
   );
 }
 
-export default function ConditionalScreen({ screenName, children }: ConditionalScreenProps) {
+export default function ConditionalScreen({ screenName, forceOpenScheduleModal = false, children }: ConditionalScreenProps) {
   const { user } = useAuth();
-  const isProfessional = user?.userType === 'professional';
+  const isProfessional = isProfessionalUser(user);
 
   // Si es profesional, mostrar pantallas específicas
   if (isProfessional) {
@@ -3974,7 +4893,7 @@ export default function ConditionalScreen({ screenName, children }: ConditionalS
       case 'dashboard':
         return <ProfessionalDashboardScreen />;
       case 'schedule':
-        return <ProfessionalScheduleScreen />;
+        return <ProfessionalScheduleScreen forceOpenScheduleModal={forceOpenScheduleModal} />;
       case 'patients':
         return <ProfessionalPatientsScreen />;
       default:
@@ -4431,6 +5350,59 @@ const styles = StyleSheet.create({
   rejectButton: {
     backgroundColor: '#F44336',
   },
+  confirmedAgendaCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  confirmedAgendaBadge: {
+    backgroundColor: '#4CAF50',
+  },
+  ghManageRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    gap: 10,
+  },
+  ghManageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  ghRescheduleBtn: {
+    backgroundColor: '#fff8e1',
+    borderColor: '#ffcc80',
+  },
+  ghRescheduleBtnText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#e65100',
+  },
+  ghCancelBtn: {
+    backgroundColor: '#ffebee',
+    borderColor: '#ffcdd2',
+  },
+  ghCancelBtnText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#c62828',
+  },
   // Estilos para el modal de gestión de horarios
   modalContainer: {
     flex: 1,
@@ -4553,33 +5525,31 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    alignItems: 'center',
+    marginHorizontal: 6,
+    minHeight: 52,
   },
   cancelButton: {
-    backgroundColor: 'white',
-    borderWidth: 2,
-    borderColor: '#e1e1e1',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
   saveButton: {
     backgroundColor: '#667eea',
   },
   cancelButtonText: {
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: '600',
     color: '#666',
+    textAlign: 'center',
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+    textAlign: 'center',
   },
   // Estilos para pantalla de pacientes
   searchContainer: {
@@ -6659,11 +7629,93 @@ const styles = StyleSheet.create({
      color: '#333',
      marginLeft: 8,
    },
-   catalogSelectorContent: {
-     flex: 1,
-     flexDirection: 'row',
-     alignItems: 'center',
-     gap: 12,
-   },
+     catalogSelectorContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  // Estilos específicos para gestión de horarios
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  customSchedule: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  customText: {
+    color: '#4caf50',
+  },
+  defaultSchedule: {
+    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  defaultText: {
+    color: '#ff9800',
+  },
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff3e0',
+    borderWidth: 1,
+    borderColor: '#ff9800',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    gap: 8,
+  },
+  resetButtonText: {
+    color: '#ff9800',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Estilos para horarios bloqueados
+  hourToggleBlocked: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#d32f2f',
+    borderWidth: 2,
+    opacity: 0.7,
+  },
+  hourTextBlocked: {
+    color: '#d32f2f',
+    fontWeight: 'bold',
+  },
+  hourIndicatorBlocked: {
+    backgroundColor: '#d32f2f',
+  },
+  blockedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(211, 47, 47, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  blockedText: {
+    fontSize: 10,
+    color: '#d32f2f',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
 
 });

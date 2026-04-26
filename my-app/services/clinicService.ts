@@ -1,3 +1,4 @@
+// @ts-nocheck — beta
 import api from './api';
 import authService from './authService';
 

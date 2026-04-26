@@ -1,60 +1,42 @@
 {
   "expo": {
-    "name": "Turnario",
-    "slug": "turnario",
+    "name": "TurnarioApp",
+    "slug": "turnario-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#667eea"
+      "backgroundColor": "#ffffff"
     },
-
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.turnario",
-      "buildNumber": "1.0.0",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para las videollamadas",
-        "NSMicrophoneUsageDescription": "Esta aplicación necesita acceso al micrófono para las videollamadas",
-        "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la galería para subir fotos de perfil",
-        "NSLocationWhenInUseUsageDescription": "Esta aplicación necesita acceso a la ubicación para mostrar profesionales cercanos"
-      }
+      "jsEngine": "hermes",
+      "bundleIdentifier": "com.turnario.app"
     },
     "android": {
-      "package": "com.yourcompany.turnario",
-      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#667eea"
+        "backgroundColor": "#FFFFFF"
       },
-      "permissions": [
-        "CAMERA",
-        "RECORD_AUDIO",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "NOTIFICATIONS"
-      ]
+      "jsEngine": "hermes",
+      "package": "com.turnario.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "jsEngine": "hermes",
     "plugins": [
-      [
-        "expo-notifications",
-        {
-          "color": "#667eea"
-        }
-      ]
+      "expo-router"
     ],
-
+    "experiments": {
+      "typedRoutes": true
+    },
+    "scheme": "turnario"
   }
 }

@@ -1,7 +1,20 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import appointmentService from '../services/appointmentService';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { getBackendBaseUrl } from '../config/backend';
+import { isMongoObjectIdString } from '../services/calendarService';
+import simpleAuthService from '../services/simpleAuthService';
+import { canClientCancelAppointment } from '../utils/appointmentCancellationPolicy';
 import { useAuth } from './AuthContext';
+import { useAvailability } from './AvailabilityContext';
+
+export type AppointmentStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'cancelled'
+  | 'completed'
+  | 'pending_payment'
+  | 'pending_approval'
+  | 'finished';
 
 export interface Appointment {
   id: string;
@@ -11,15 +24,131 @@ export interface Appointment {
   date: string;
   time: string;
   notes?: string;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  status: AppointmentStatus;
   clientId: string;
   clientName: string;
+  patientName?: string;
+  patientId?: string;
+  patientEmail?: string;
+  patientPhone?: string;
+  serviceId?: string;
+  depositAmount?: number;
+  /** Estado del pago de seña en Mercado Pago (backend Expo) */
+  paymentStatus?: string;
+  totalAmount?: number;
   createdAt: Date;
+}
+
+/** Alta de cita: varios campos se completan en pantalla de forma parcial (beta). */
+export type AppointmentCreateInput = Omit<
+  Appointment,
+  'id' | 'createdAt' | 'status' | 'professional' | 'clientId' | 'clientName'
+> & {
+  /** Si viene del POST /api/v1/appointments/create, usar el _id de Mongo para bloqueos y recarga */
+  id?: string;
+  status?: AppointmentStatus;
+  professional?: string;
+  clientId?: string;
+  clientName?: string;
+};
+
+/** Documento lean de ExpoAppointment (backend) → modelo de la app */
+function mapExpoAppointmentDoc(a: Record<string, unknown>): Appointment {
+  const profRaw = a.professionalId;
+  const profId =
+    profRaw && typeof profRaw === 'object' && profRaw !== null && '_id' in profRaw
+      ? String((profRaw as { _id: unknown })._id)
+      : profRaw != null
+        ? String(profRaw)
+        : '';
+  const clientRaw = a.clientId;
+  const clientId =
+    clientRaw && typeof clientRaw === 'object' && clientRaw !== null && '_id' in clientRaw
+      ? String((clientRaw as { _id: unknown })._id)
+      : clientRaw != null
+        ? String(clientRaw)
+        : '';
+  let clientProfileName = '';
+  let clientProfileEmail = '';
+  let clientProfilePhone = '';
+  if (clientRaw && typeof clientRaw === 'object' && clientRaw !== null && '_id' in clientRaw) {
+    const cr = clientRaw as { fullName?: string; email?: string; phone?: string };
+    clientProfileName = typeof cr.fullName === 'string' ? cr.fullName : '';
+    clientProfileEmail = typeof cr.email === 'string' ? cr.email : '';
+    clientProfilePhone = typeof cr.phone === 'string' ? cr.phone : '';
+  }
+  const created =
+    typeof a.createdAt === 'string' || a.createdAt instanceof Date
+      ? new Date(a.createdAt as string | Date)
+      : new Date();
+  const st = (a.status as string) || 'confirmed';
+  const status = (
+    ['pending', 'confirmed', 'cancelled', 'completed', 'pending_payment', 'pending_approval', 'finished'].includes(
+      st
+    )
+      ? st
+      : 'confirmed'
+  ) as AppointmentStatus;
+  return {
+    id: String(a._id),
+    service: (a.service as string) || 'Servicio',
+    professional: (a.professionalName as string) || 'Profesional',
+    professionalId: profId,
+    date: String(a.date),
+    time: String(a.time),
+    notes: (a.notes as string) || '',
+    status,
+    clientId,
+    clientName: (a.patientName as string) || clientProfileName || 'Cliente',
+    patientName: (a.patientName as string) || clientProfileName || '',
+    patientEmail: (a.patientEmail as string) || clientProfileEmail || '',
+    patientPhone: (a.patientPhone as string) || clientProfilePhone || '',
+    totalAmount: typeof a.totalAmount === 'number' ? a.totalAmount : 0,
+    depositAmount: typeof a.depositAmount === 'number' ? a.depositAmount : undefined,
+    paymentStatus: typeof a.paymentStatus === 'string' ? a.paymentStatus : undefined,
+    createdAt: created,
+  };
+}
+
+/** Servidor tiene prioridad; del caché solo entran ids que el API no devolvió (evita borrar citas si el GET filtró mal). */
+function mergeAppointmentsFromApiAndCache(
+  fromApi: Appointment[],
+  cached: Appointment[]
+): Appointment[] {
+  const map = new Map<string, Appointment>();
+  for (const row of fromApi) {
+    map.set(String(row.id), row);
+  }
+  for (const row of cached) {
+    const id = String(row.id);
+    if (!map.has(id)) {
+      map.set(id, {
+        ...row,
+        createdAt:
+          row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
+async function readCachedAppointments(): Promise<Appointment[]> {
+  const raw = await AsyncStorage.getItem('appointments');
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>[];
+    return parsed.map((a) => ({
+      ...(a as unknown as Appointment),
+      createdAt: new Date(a.createdAt as string | Date),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 interface AppointmentContextType {
   appointments: Appointment[];
-  addAppointment: (appointment: Omit<Appointment, 'id' | 'createdAt' | 'status'>) => Promise<void>;
+  addAppointment: (appointment: AppointmentCreateInput) => Promise<void>;
   updateAppointmentStatus: (appointmentId: string, status: Appointment['status']) => Promise<void>;
   deleteAppointment: (appointmentId: string) => Promise<void>;
   getAppointmentsForUser: (userId: string) => Appointment[];
@@ -27,6 +156,23 @@ interface AppointmentContextType {
   getPendingAppointments: (userId: string) => Appointment[];
   confirmAppointment: (appointmentId: string) => Promise<void>;
   rejectAppointment: (appointmentId: string) => Promise<void>;
+  completeAppointment: (appointmentId: string) => Promise<void>;
+  /** Paciente: cancela vía API con regla de 48 h; actualiza estado local si OK. */
+  cancelAppointmentAsClient: (appointmentId: string) => Promise<{ ok: boolean; message?: string }>;
+  /** Paciente: nueva fecha/hora; misma regla 48 h que cancelar; actualiza local y bloqueos de agenda. */
+  rescheduleAppointmentAsClient: (
+    appointmentId: string,
+    newDate: string,
+    newTime: string
+  ) => Promise<{ ok: boolean; message?: string }>;
+  cancelAppointmentAsProfessional: (
+    appointmentId: string
+  ) => Promise<{ ok: boolean; message?: string }>;
+  rescheduleAppointmentAsProfessional: (
+    appointmentId: string,
+    newDate: string,
+    newTime: string
+  ) => Promise<{ ok: boolean; message?: string }>;
   refreshAppointments: () => Promise<void>;
   loading: boolean;
   error: string | null;
@@ -35,18 +181,34 @@ interface AppointmentContextType {
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
 export const useAppointments = () => {
+  // Usar el contexto local directamente
   const context = useContext(AppointmentContext);
   if (!context) {
-    console.error('useAppointments must be used within an AppointmentProvider');
-    // Retornar un objeto por defecto en lugar de lanzar un error
+    console.warn('useAppointments: Usando valores por defecto - AppointmentProvider no disponible');
     return {
       appointments: [],
       addAppointment: async () => console.warn('AppointmentProvider not available'),
       updateAppointmentStatus: async () => console.warn('AppointmentProvider not available'),
       deleteAppointment: async () => console.warn('AppointmentProvider not available'),
+      getAppointmentsForUser: () => [],
       getUpcomingAppointments: () => [],
+      getPendingAppointments: () => [],
       confirmAppointment: async () => console.warn('AppointmentProvider not available'),
       rejectAppointment: async () => console.warn('AppointmentProvider not available'),
+      completeAppointment: async () => console.warn('AppointmentProvider not available'),
+      cancelAppointmentAsClient: async () => ({ ok: false, message: 'AppointmentProvider not available' }),
+      rescheduleAppointmentAsClient: async () => ({
+        ok: false,
+        message: 'AppointmentProvider not available',
+      }),
+      cancelAppointmentAsProfessional: async () => ({
+        ok: false,
+        message: 'AppointmentProvider not available',
+      }),
+      rescheduleAppointmentAsProfessional: async () => ({
+        ok: false,
+        message: 'AppointmentProvider not available',
+      }),
       refreshAppointments: async () => console.warn('AppointmentProvider not available'),
       loading: false,
       error: null,
@@ -60,62 +222,87 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { blockTimeSlot, unblockAppointmentTimeSlots } = useAvailability();
 
-  // Cargar citas al iniciar
+  // SOLUCIÓN DEFINITIVA: NO cargar citas hasta que el usuario esté realmente logueado
   useEffect(() => {
-    if (user) {
+    // Solo cargar citas si hay un usuario REAL (no de prueba) y está autenticado
+    if (user && !user._id.startsWith('test_') && !user.email.includes('test.') && user.email !== 'test.professional@turnario.com') {
+      console.log('👤 Usuario REAL autenticado, cargando citas...');
       loadAppointments();
+    } else {
+      console.log('⚠️ Usuario no autenticado o es usuario de prueba, NO cargando citas');
+      // NO cargar nada hasta que haya un usuario real
     }
   }, [user]);
 
-  // Cargar citas del backend
+  // Cargar citas: Mongo (ExpoAppointment) + JWT; fusionar con caché para no perder filas si el GET vino vacío
   const loadAppointments = async () => {
-    if (!user) return;
-    
     try {
       setLoading(true);
       setError(null);
-      
-      // Intentar cargar del backend
-      try {
-        const backendAppointments = await appointmentService.getUserAppointments();
-        
-        // Convertir citas del backend al formato del frontend
-        const convertedAppointments: Appointment[] = backendAppointments.map(apt => ({
-          id: apt._id,
-          service: apt.service?.name || 'Servicio no especificado',
-          professional: apt.professional?.fullName || 'Profesional no especificado',
-          professionalId: apt.professionalId,
-          date: apt.date,
-          time: apt.time,
-          notes: apt.notes,
-          status: apt.status,
-          clientId: apt.clientId,
-          clientName: apt.client?.fullName || 'Cliente no especificado',
-          createdAt: new Date(apt.createdAt),
-        }));
-        
-        setAppointments(convertedAppointments);
-        console.log('✅ Citas cargadas del backend:', convertedAppointments.length);
-        
-        // Guardar en AsyncStorage como respaldo
-        await AsyncStorage.setItem('appointments', JSON.stringify(convertedAppointments));
-        
-      } catch (backendError) {
-        console.error('Error cargando del backend, usando respaldo local:', backendError);
-        
-        // Fallback a citas locales
-        const savedAppointments = await AsyncStorage.getItem('appointments');
-        if (savedAppointments) {
-          const parsed = JSON.parse(savedAppointments);
-          const appointmentsWithDates = parsed.map((a: any) => ({
-            ...a,
-            createdAt: new Date(a.createdAt),
-          }));
-          setAppointments(appointmentsWithDates);
+
+      const cached = await readCachedAppointments();
+
+      const token = await simpleAuthService.getToken();
+      const authHeaders: Record<string, string> = {};
+      if (token) {
+        authHeaders.Authorization = `Bearer ${token}`;
+      }
+
+      const userId = String(user?._id || user?.id || '').trim();
+
+      const tryFetchList = async (path: string): Promise<Appointment[] | null> => {
+        if (!userId || userId.length !== 24 || !token) {
+          return null;
+        }
+        const url = `${getBackendBaseUrl()}${path}`;
+        const response = await fetch(url, { headers: authHeaders });
+        if (!response.ok) {
+          console.log(`❌ Citas API ${path}: HTTP ${response.status}`);
+          return null;
+        }
+        const data = await response.json();
+        if (!data.success || !Array.isArray(data.data)) {
+          return null;
+        }
+        return data.data.map((row: Record<string, unknown>) => mapExpoAppointmentDoc(row));
+      };
+
+      if (user?.userType === 'professional') {
+        const fromApi = await tryFetchList(`/api/v1/appointments/professional/${userId}`);
+        if (fromApi !== null) {
+          const merged = mergeAppointmentsFromApiAndCache(fromApi, cached);
+          setAppointments(merged);
+          await AsyncStorage.setItem('appointments', JSON.stringify(merged));
+          console.log(
+            `✅ Citas profesional — API: ${fromApi.length}, tras fusionar caché: ${merged.length}`
+          );
+          return;
         }
       }
-      
+
+      if (user?.userType === 'client') {
+        const fromApi = await tryFetchList(`/api/v1/appointments/client/${userId}`);
+        if (fromApi !== null) {
+          const merged = mergeAppointmentsFromApiAndCache(fromApi, cached);
+          setAppointments(merged);
+          await AsyncStorage.setItem('appointments', JSON.stringify(merged));
+          console.log(
+            `✅ Citas cliente — API: ${fromApi.length}, tras fusionar caché: ${merged.length}`
+          );
+          return;
+        }
+      }
+
+      if (cached.length > 0) {
+        setAppointments(cached);
+        console.log('📱 Citas solo desde AsyncStorage (sin token o API no disponible):', cached.length);
+        return;
+      }
+
+      setAppointments([]);
+      console.log('📋 Sin citas en servidor ni caché local');
     } catch (error) {
       console.error('Error loading appointments:', error);
       setError('Error al cargar citas');
@@ -139,40 +326,60 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   // Agregar cita (backend y local)
-  const addAppointment = async (appointmentData: Omit<Appointment, 'id' | 'createdAt' | 'status'>) => {
+  const addAppointment = async (appointmentData: AppointmentCreateInput) => {
     try {
-      // Intentar crear en el backend
-      try {
-        const newBackendAppointment = await appointmentService.createAppointment({
-          professionalId: appointmentData.professionalId,
-          serviceId: appointmentData.service, // Asumiendo que service es el ID del servicio
-          clinicId: 'clinic_default', // ID por defecto, debería venir del contexto
-          date: appointmentData.date,
-          time: appointmentData.time,
-          notes: appointmentData.notes,
-          clientNotes: appointmentData.notes,
-        });
-        
-        console.log('✅ Cita creada en backend:', newBackendAppointment);
-        
-        // Recargar citas del backend
-        await loadAppointments();
-        
-      } catch (backendError) {
-        console.error('Error creando en backend, usando fallback local:', backendError);
-        
-        // Fallback a creación local
-        const newAppointment: Appointment = {
-          ...appointmentData,
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          createdAt: new Date(),
-          status: 'pending',
-        };
+      // SOLUCIÓN DEFINITIVA: Crear cita solo localmente
+      console.log('📱 Creando cita localmente (modo desarrollo)');
 
-        const updatedAppointments = [newAppointment, ...appointments];
-        setAppointments(updatedAppointments);
-        saveAppointments(updatedAppointments);
-        console.log('📅 Nueva cita agregada localmente:', newAppointment);
+      const appointmentId =
+        (appointmentData.id && String(appointmentData.id).trim()) ||
+        Date.now().toString() + Math.random().toString(36).substr(2, 9);
+      const newAppointment: Appointment = {
+        ...appointmentData,
+        professional:
+          appointmentData.professional ??
+          appointmentData.professionalId ??
+          'Profesional',
+        clientId: appointmentData.clientId ?? appointmentData.patientId ?? '',
+        clientName:
+          appointmentData.clientName ??
+          appointmentData.patientName ??
+          'Cliente',
+        id: appointmentId,
+        createdAt: new Date(),
+        status: appointmentData.status || 'pending',
+      };
+
+      const updatedAppointments = [newAppointment, ...appointments];
+      setAppointments(updatedAppointments);
+      saveAppointments(updatedAppointments);
+      console.log('📅 Nueva cita agregada localmente:', newAppointment);
+
+      // Bloquear horario solo si la cita ya está confirmada (no mientras espera al profesional).
+      const profId = appointmentData.professionalId;
+      const waitForPro = newAppointment.status === 'pending_approval';
+      if (
+        !waitForPro &&
+        appointmentId &&
+        isMongoObjectIdString(profId)
+      ) {
+        try {
+          await blockTimeSlot(
+            profId,
+            appointmentData.date,
+            appointmentData.time,
+            appointmentId,
+            'Cita programada'
+          );
+          console.log('🔒 Horario bloqueado automáticamente para cita:', appointmentId);
+        } catch (blockError) {
+          console.error('⚠️ Error bloqueando horario (cita creada pero horario no bloqueado):', blockError);
+          // No lanzar error aquí para no afectar la creación de la cita
+        }
+      } else if (appointmentId && !isMongoObjectIdString(profId)) {
+        console.log(
+          'ℹ️ Sin bloqueo remoto de horario: professionalId no es ObjectId de Mongo (demo o usuario local).'
+        );
       }
       
     } catch (error) {
@@ -184,18 +391,28 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Actualizar estado de cita
   const updateAppointmentStatus = async (appointmentId: string, status: Appointment['status']) => {
     try {
-      // Actualizar en el backend - usar el método específico para cambio de estado
-      try {
-        if (status === 'confirmed') {
-          await appointmentService.confirmAppointment(appointmentId);
-        } else if (status === 'cancelled') {
-          await appointmentService.cancelAppointment(appointmentId);
-        } else if (status === 'completed') {
-          await appointmentService.markAsCompleted(appointmentId);
+      // Obtener datos de la cita antes de actualizar para manejar bloqueos
+      const appointmentToUpdate = appointments.find(appointment => appointment.id === appointmentId);
+      
+      // SOLUCIÓN DEFINITIVA: Solo actualizar localmente
+      console.log('📱 Actualizando estado de cita localmente (modo desarrollo)');
+      
+      // Desbloquear horarios cuando se cancela una cita
+      if (
+        status === 'cancelled' &&
+        appointmentToUpdate &&
+        unblockAppointmentTimeSlots &&
+        isMongoObjectIdString(appointmentToUpdate.professionalId)
+      ) {
+        try {
+          await unblockAppointmentTimeSlots(
+            appointmentToUpdate.professionalId,
+            appointmentId
+          );
+          console.log('🔓 Horarios desbloqueados para cita cancelada:', appointmentId);
+        } catch (unblockError) {
+          console.error('⚠️ Error desbloqueando horarios:', unblockError);
         }
-        console.log('✅ Estado de cita actualizado en backend');
-      } catch (backendError) {
-        console.error('Error actualizando estado en backend:', backendError);
       }
       
       // Actualizar localmente
@@ -213,12 +430,30 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Eliminar cita
   const deleteAppointment = async (appointmentId: string) => {
     try {
-      // Eliminar del backend
-      try {
-        await appointmentService.cancelAppointment(appointmentId);
-        console.log('✅ Cita cancelada en backend');
-      } catch (backendError) {
-        console.error('Error cancelando en backend:', backendError);
+      // Obtener datos de la cita antes de eliminarla para desbloquear horarios
+      const appointmentToDelete = appointments.find(appointment => appointment.id === appointmentId);
+      
+      // SOLUCIÓN DEFINITIVA: Solo eliminar localmente
+      console.log('📱 Eliminando cita localmente (modo desarrollo)');
+      
+      // Desbloquear horarios si la cita existe
+      if (
+        appointmentToDelete &&
+        unblockAppointmentTimeSlots &&
+        isMongoObjectIdString(appointmentToDelete.professionalId)
+      ) {
+        try {
+          await unblockAppointmentTimeSlots(
+            appointmentToDelete.professionalId,
+            appointmentId
+          );
+          console.log('🔓 Horarios desbloqueados para cita cancelada:', appointmentId);
+        } catch (unblockError) {
+          console.error('⚠️ Error desbloqueando horarios (cita cancelada pero horarios no desbloqueados):', unblockError);
+          // No lanzar error aquí para no afectar la cancelación de la cita
+        }
+      } else if (appointmentToDelete && !unblockAppointmentTimeSlots) {
+        console.warn('⚠️ unblockAppointmentTimeSlots no disponible, horarios no desbloqueados');
       }
       
       // Eliminar localmente
@@ -241,35 +476,151 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Obtener citas próximas
   const getUpcomingAppointments = (userId: string) => {
     const now = new Date();
-    return appointments.filter(appointment => 
-      (appointment.clientId === userId || appointment.professionalId === userId) &&
-      (appointment.status === 'confirmed' || appointment.status === 'pending') &&
-      new Date(appointment.date) > now
-    ).sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
+    now.setHours(0, 0, 0, 0); // Normalizar a inicio del día
+    
+    console.log('🔍 getUpcomingAppointments - Parámetros:', {
+      userId,
+      totalAppointments: appointments.length,
+      today: now.toISOString().split('T')[0],
+      appointments: appointments.map(apt => ({
+        id: apt.id,
+        professionalId: apt.professionalId,
+        clientId: apt.clientId,
+        date: apt.date,
+        status: apt.status,
+        patientName: apt.patientName
+      }))
+    });
+    
+    const filteredAppointments = appointments.filter(appointment => {
+      // Para profesionales, mostrar todas sus citas (el backend ya filtró por professionalId)
+      // Para clientes, filtrar por clientId
+      const userIdString = userId?.toString();
+      const professionalIdString = appointment.professionalId?.toString();
+      const clientIdString = appointment.clientId?.toString();
+      
+      let belongsToUser = false;
+      
+      if (user?.userType === 'professional') {
+        // Si es profesional, todas las citas ya vienen filtradas del backend, aceptarlas todas
+        belongsToUser = true;
+        console.log('👨‍⚕️ Profesional - Aceptando cita automáticamente');
+      } else {
+        const patientIdString = appointment.patientId?.toString();
+        belongsToUser =
+          clientIdString === userIdString ||
+          patientIdString === userIdString;
+      }
+      
+      // Incluye esperando confirmación del profesional
+      const isActive =
+        appointment.status === 'confirmed' ||
+        appointment.status === 'pending' ||
+        appointment.status === 'pending_approval' ||
+        appointment.status === 'pending_payment';
+      
+      // Verificar que la fecha es hoy o futura (soportar formato ISO y formato legible)
+      let appointmentDate: Date;
+      try {
+        // Si la fecha está en formato ISO (2025-10-06)
+        if (appointment.date.includes('-')) {
+          appointmentDate = new Date(appointment.date + 'T00:00:00');
+        } else {
+          // Si está en formato legible, intentar parsear
+          appointmentDate = new Date(appointment.date);
+        }
+        appointmentDate.setHours(0, 0, 0, 0);
+      } catch {
+        return false; // Si no se puede parsear la fecha, excluir la cita
+      }
+      
+      const isTodayOrFuture = appointmentDate >= now;
+      
+      console.log('🔍 Filtro de citas próximas:', {
+        appointmentId: appointment.id,
+        professionalId: appointment.professionalId,
+        clientId: appointment.clientId,
+        userId,
+        date: appointment.date,
+        today: now.toISOString().split('T')[0],
+        belongsToUser,
+        isActive,
+        isTodayOrFuture,
+        status: appointment.status,
+        patientName: appointment.patientName
+      });
+      
+      return belongsToUser && isActive && isTodayOrFuture;
+    });
+    
+    console.log('🔍 Citas filtradas:', filteredAppointments.length, filteredAppointments.map(apt => ({
+      id: apt.id,
+      patientName: apt.patientName,
+      date: apt.date,
+      status: apt.status
+    })));
+    
+    return filteredAppointments.sort((a, b) => {
+      // Ordenar por fecha y hora
+      try {
+        const dateA = a.date.includes('-') ? new Date(a.date + 'T' + a.time) : new Date(a.date + ' ' + a.time);
+        const dateB = b.date.includes('-') ? new Date(b.date + 'T' + b.time) : new Date(b.date + ' ' + b.time);
+        return dateA.getTime() - dateB.getTime();
+      } catch {
+        return 0; // Mantener orden original si hay error
+      }
+    });
   };
 
   // Obtener citas pendientes
   const getPendingAppointments = (userId: string) => {
     return appointments.filter(appointment => 
-      appointment.professionalId === userId && appointment.status === 'pending'
+      String(appointment.professionalId) === String(userId) &&
+          (appointment.status === 'pending' || appointment.status === 'pending_approval')
     ).sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
   };
 
   // Confirmar cita
   const confirmAppointment = async (appointmentId: string) => {
     try {
-      // Confirmar en el backend
-      try {
-        await appointmentService.confirmAppointment(appointmentId);
-        console.log('✅ Cita confirmada en backend');
-      } catch (backendError) {
-        console.error('Error confirmando en backend:', backendError);
+      const aptSnapshot = appointments.find((a) => String(a.id) === String(appointmentId));
+      const token = await simpleAuthService.getToken();
+      if (token && isMongoObjectIdString(appointmentId)) {
+        const res = await fetch(
+          `${getBackendBaseUrl()}/api/v1/appointments/expo/${appointmentId}/confirm`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        if (!res.ok) {
+          const t = await res.text();
+          console.warn('⚠️ confirmAppointment API:', res.status, t);
+        }
       }
-      
-      // Actualizar localmente
       await updateAppointmentStatus(appointmentId, 'confirmed');
+      if (
+        aptSnapshot &&
+        blockTimeSlot &&
+        isMongoObjectIdString(aptSnapshot.professionalId)
+      ) {
+        try {
+          await blockTimeSlot(
+            aptSnapshot.professionalId,
+            aptSnapshot.date,
+            aptSnapshot.time,
+            appointmentId,
+            'Cita confirmada'
+          );
+        } catch (e) {
+          console.warn('Bloqueo de horario tras confirmar:', e);
+        }
+      }
+      await refreshAppointments();
       console.log('✅ Cita confirmada:', appointmentId);
-      
     } catch (error) {
       console.error('Error confirming appointment:', error);
     }
@@ -278,21 +629,338 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Rechazar cita
   const rejectAppointment = async (appointmentId: string) => {
     try {
-      // Rechazar en el backend
-      try {
-        await appointmentService.rejectAppointment(appointmentId, 'Cita rechazada por el profesional');
-        console.log('✅ Cita rechazada en backend');
-      } catch (backendError) {
-        console.error('Error rechazando en backend:', backendError);
+      const token = await simpleAuthService.getToken();
+      if (token && isMongoObjectIdString(appointmentId)) {
+        const res = await fetch(
+          `${getBackendBaseUrl()}/api/v1/appointments/expo/${appointmentId}/reject`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        if (!res.ok) {
+          const t = await res.text();
+          console.warn('⚠️ rejectAppointment API:', res.status, t);
+        }
       }
       
-      // Actualizar localmente
       await updateAppointmentStatus(appointmentId, 'cancelled');
+      await refreshAppointments();
       console.log('❌ Cita rechazada:', appointmentId);
-      
     } catch (error) {
       console.error('Error rejecting appointment:', error);
     }
+  };
+
+  const completeAppointment = async (appointmentId: string) => {
+    try {
+      const token = await simpleAuthService.getToken();
+      if (token && isMongoObjectIdString(appointmentId)) {
+        const res = await fetch(
+          `${getBackendBaseUrl()}/api/v1/appointments/expo/${appointmentId}/complete`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        if (!res.ok) {
+          const t = await res.text();
+          console.warn('⚠️ completeAppointment API:', res.status, t);
+        }
+      }
+      await updateAppointmentStatus(appointmentId, 'completed');
+      await refreshAppointments();
+      console.log('✅ Cita marcada como completada:', appointmentId);
+    } catch (error) {
+      console.error('Error completing appointment:', error);
+    }
+  };
+
+  const cancelAppointmentAsClient = async (
+    appointmentId: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    if (user?.userType !== 'client') {
+      return { ok: false, message: 'Solo los pacientes pueden usar esta acción.' };
+    }
+    const apt = appointments.find((a) => String(a.id) === String(appointmentId));
+    if (!apt) {
+      return { ok: false, message: 'Cita no encontrada.' };
+    }
+    const gate = canClientCancelAppointment(apt.date, apt.time);
+    if (!gate.ok) {
+      return { ok: false, message: gate.message };
+    }
+
+    const token = await simpleAuthService.getToken();
+    const base = getBackendBaseUrl();
+    if (token && isMongoObjectIdString(appointmentId)) {
+      try {
+        const res = await fetch(
+          `${base}/api/v1/appointments/expo/${appointmentId}/cancel-by-client`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        const json = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+        };
+        if (!res.ok || !json.success) {
+          return {
+            ok: false,
+            message:
+              (typeof json.message === 'string' && json.message) ||
+              `No se pudo cancelar (${res.status})`,
+          };
+        }
+      } catch (e) {
+        return {
+          ok: false,
+          message: e instanceof Error ? e.message : 'Error de red',
+        };
+      }
+    }
+
+    await updateAppointmentStatus(appointmentId, 'cancelled');
+    await refreshAppointments();
+    return { ok: true };
+  };
+
+  const rescheduleAppointmentAsClient = async (
+    appointmentId: string,
+    newDate: string,
+    newTime: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    if (user?.userType !== 'client') {
+      return { ok: false, message: 'Solo los pacientes pueden reprogramar citas.' };
+    }
+    const apt = appointments.find((a) => String(a.id) === String(appointmentId));
+    if (!apt) {
+      return { ok: false, message: 'Cita no encontrada.' };
+    }
+    const gate = canClientCancelAppointment(apt.date, apt.time);
+    if (!gate.ok) {
+      return { ok: false, message: gate.message };
+    }
+    const d0 = String(apt.date).trim();
+    const t0 = String(apt.time).trim();
+    const d1 = String(newDate).trim();
+    const t1 = String(newTime).trim();
+    if (!d1 || !t1) {
+      return { ok: false, message: 'Elegí fecha y hora nuevas.' };
+    }
+    if (d0 === d1 && t0 === t1) {
+      return { ok: false, message: 'La fecha y hora son las mismas que las actuales.' };
+    }
+
+    const token = await simpleAuthService.getToken();
+    const base = getBackendBaseUrl();
+    if (token && isMongoObjectIdString(appointmentId)) {
+      try {
+        const res = await fetch(
+          `${base}/api/v1/appointments/expo/${appointmentId}/reschedule-by-client`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ newDate: d1, newTime: t1 }),
+          }
+        );
+        const json = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+        };
+        if (!res.ok || !json.success) {
+          return {
+            ok: false,
+            message:
+              (typeof json.message === 'string' && json.message) ||
+              `No se pudo reprogramar (${res.status})`,
+          };
+        }
+        try {
+          if (unblockAppointmentTimeSlots && isMongoObjectIdString(apt.professionalId)) {
+            await unblockAppointmentTimeSlots(apt.professionalId, appointmentId);
+          }
+          if (blockTimeSlot && isMongoObjectIdString(apt.professionalId)) {
+            await blockTimeSlot(apt.professionalId, d1, t1, appointmentId, 'Cita reprogramada');
+          }
+        } catch (e) {
+          console.warn('rescheduleAppointmentAsClient — bloqueo de agenda:', e);
+        }
+        await refreshAppointments();
+        return { ok: true };
+      } catch (e) {
+        return {
+          ok: false,
+          message: e instanceof Error ? e.message : 'Error de red',
+        };
+      }
+    }
+
+    try {
+      if (unblockAppointmentTimeSlots && isMongoObjectIdString(apt.professionalId)) {
+        await unblockAppointmentTimeSlots(apt.professionalId, appointmentId);
+      }
+      if (blockTimeSlot && isMongoObjectIdString(apt.professionalId)) {
+        await blockTimeSlot(apt.professionalId, d1, t1, appointmentId, 'Cita reprogramada');
+      }
+    } catch (e) {
+      console.warn('rescheduleAppointmentAsClient — bloqueo de agenda:', e);
+    }
+
+    const updatedAppointments = appointments.map((a) =>
+      String(a.id) === String(appointmentId) ? { ...a, date: d1, time: t1 } : a
+    );
+    setAppointments(updatedAppointments);
+    saveAppointments(updatedAppointments);
+    return { ok: true };
+  };
+
+  const cancelAppointmentAsProfessional = async (
+    appointmentId: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    if (user?.userType !== 'professional') {
+      return { ok: false, message: 'Solo los profesionales pueden usar esta acción.' };
+    }
+    const apt = appointments.find((a) => String(a.id) === String(appointmentId));
+    if (!apt) {
+      return { ok: false, message: 'Cita no encontrada.' };
+    }
+    const token = await simpleAuthService.getToken();
+    const base = getBackendBaseUrl();
+    if (token && isMongoObjectIdString(appointmentId)) {
+      try {
+        const res = await fetch(
+          `${base}/api/v1/appointments/expo/${appointmentId}/cancel-by-professional`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        const json = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+        };
+        if (!res.ok || !json.success) {
+          return {
+            ok: false,
+            message:
+              (typeof json.message === 'string' && json.message) ||
+              `No se pudo cancelar (${res.status})`,
+          };
+        }
+      } catch (e) {
+        return {
+          ok: false,
+          message: e instanceof Error ? e.message : 'Error de red',
+        };
+      }
+    }
+    await updateAppointmentStatus(appointmentId, 'cancelled');
+    await refreshAppointments();
+    return { ok: true };
+  };
+
+  const rescheduleAppointmentAsProfessional = async (
+    appointmentId: string,
+    newDate: string,
+    newTime: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    if (user?.userType !== 'professional') {
+      return { ok: false, message: 'Solo los profesionales pueden reprogramar citas.' };
+    }
+    const apt = appointments.find((a) => String(a.id) === String(appointmentId));
+    if (!apt) {
+      return { ok: false, message: 'Cita no encontrada.' };
+    }
+    const d1 = String(newDate).trim();
+    const t1 = String(newTime).trim();
+    if (!d1 || !t1) {
+      return { ok: false, message: 'Elegí fecha y hora nuevas.' };
+    }
+    if (String(apt.date).trim() === d1 && String(apt.time).trim() === t1) {
+      return { ok: false, message: 'La fecha y hora son las mismas que las actuales.' };
+    }
+
+    const token = await simpleAuthService.getToken();
+    const base = getBackendBaseUrl();
+    if (token && isMongoObjectIdString(appointmentId)) {
+      try {
+        const res = await fetch(
+          `${base}/api/v1/appointments/expo/${appointmentId}/reschedule-by-professional`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ newDate: d1, newTime: t1 }),
+          }
+        );
+        const json = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+        };
+        if (!res.ok || !json.success) {
+          return {
+            ok: false,
+            message:
+              (typeof json.message === 'string' && json.message) ||
+              `No se pudo reprogramar (${res.status})`,
+          };
+        }
+        try {
+          if (unblockAppointmentTimeSlots && isMongoObjectIdString(apt.professionalId)) {
+            await unblockAppointmentTimeSlots(apt.professionalId, appointmentId);
+          }
+          if (blockTimeSlot && isMongoObjectIdString(apt.professionalId)) {
+            await blockTimeSlot(apt.professionalId, d1, t1, appointmentId, 'Cita reprogramada (prof.)');
+          }
+        } catch (e) {
+          console.warn('rescheduleAppointmentAsProfessional — bloqueo de agenda:', e);
+        }
+        await refreshAppointments();
+        return { ok: true };
+      } catch (e) {
+        return {
+          ok: false,
+          message: e instanceof Error ? e.message : 'Error de red',
+        };
+      }
+    }
+
+    try {
+      if (unblockAppointmentTimeSlots && isMongoObjectIdString(apt.professionalId)) {
+        await unblockAppointmentTimeSlots(apt.professionalId, appointmentId);
+      }
+      if (blockTimeSlot && isMongoObjectIdString(apt.professionalId)) {
+        await blockTimeSlot(apt.professionalId, d1, t1, appointmentId, 'Cita reprogramada (prof.)');
+      }
+    } catch (e) {
+      console.warn('rescheduleAppointmentAsProfessional — bloqueo de agenda:', e);
+    }
+    const updatedAppointments = appointments.map((a) =>
+      String(a.id) === String(appointmentId) ? { ...a, date: d1, time: t1 } : a
+    );
+    setAppointments(updatedAppointments);
+    saveAppointments(updatedAppointments);
+    return { ok: true };
   };
 
   const value: AppointmentContextType = {
@@ -305,6 +973,11 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
     getPendingAppointments,
     confirmAppointment,
     rejectAppointment,
+    completeAppointment,
+    cancelAppointmentAsClient,
+    rescheduleAppointmentAsClient,
+    cancelAppointmentAsProfessional,
+    rescheduleAppointmentAsProfessional,
     refreshAppointments,
     loading,
     error,

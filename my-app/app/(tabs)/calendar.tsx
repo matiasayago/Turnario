@@ -1,32 +1,88 @@
-import React, { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Modal,
-  TextInput,
+  ActivityIndicator,
   Alert,
   Linking,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 import ConditionalScreen from '../../components/ConditionalScreen';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNotifications } from '../../contexts/NotificationContext';
-import { useAppointments } from '../../contexts/AppointmentContext';
-import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
 import CustomCalendar from '../../components/CustomCalendar';
+import TimeSlotSelector from '../../components/TimeSlotSelector';
+import { getBackendBaseUrl } from '../../config/backend';
 import { openMercadoPagoDirectly } from '../../config/mercadopago';
-import { SERVICES, searchServices } from '../../constants/services';
+import {
+  getServicesByCategory,
+  professionalOffersService,
+  SERVICE_CATEGORIES,
+  SERVICES,
+  searchServices,
+} from '../../constants/services';
+import { useAppointments } from '../../contexts/AppointmentContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useAvailability } from '../../contexts/AvailabilityContext';
+import { useNotifications } from '../../contexts/NotificationContext';
+import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
+import { canClientCancelAppointment } from '../../utils/appointmentCancellationPolicy';
+import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingSlotsService';
+import { simpleAuthService } from '../../services/simpleAuthService';
+import { consumeOpenManageScheduleModalRequest } from '../../utils/scheduleNavigation';
+
+const BACKEND_URL = getBackendBaseUrl();
+
+const CLIENT_RESERVA_TOTAL_AMOUNT = 10000;
+
+function resolveProfessionalMongoId(
+  isProfessionalUser: boolean,
+  userId: string | undefined,
+  appointment: { professionalId: string; professionalName: string },
+  directory: { id: string; name: string }[]
+): string {
+  if (isProfessionalUser) {
+    return userId || '';
+  }
+  if (appointment.professionalId && appointment.professionalId.length === 24) {
+    return appointment.professionalId;
+  }
+  const found = directory.find((p) => p.name === appointment.professionalName);
+  return found?.id || '';
+}
 
 export default function CalendarScreen() {
+  const params = useLocalSearchParams<{ manageSchedule?: string | string[] }>();
   const { user } = useAuth();
+  const [forceOpenFromSettings, setForceOpenFromSettings] = useState(false);
+  const forceOpenScheduleModal = useMemo(() => {
+    const raw = params?.manageSchedule;
+    const fromQuery = Array.isArray(raw) ? raw.includes('1') || raw.includes('true') : raw === '1' || raw === 'true';
+    return fromQuery || forceOpenFromSettings;
+  }, [params?.manageSchedule, forceOpenFromSettings]);
+
+  useEffect(() => {
+    setForceOpenFromSettings(consumeOpenManageScheduleModalRequest());
+  }, []);
+
   const { addNotification } = useNotifications();
-  const { addAppointment, getUpcomingAppointments, appointments } = useAppointments();
+  const {
+    addAppointment,
+    getUpcomingAppointments,
+    appointments,
+    refreshAppointments,
+    cancelAppointmentAsClient,
+    rescheduleAppointmentAsClient,
+    cancelAppointmentAsProfessional,
+    rescheduleAppointmentAsProfessional,
+  } = useAppointments();
   const { shouldOpenReservaConSenaModal, closeReservaConSenaModal, openReservaConSenaModal } = useReservaConSena();
+  const { availableProfessionals } = useAvailability();
   const [refreshing, setRefreshing] = useState(false);
   const isProfessional = user?.userType === 'professional';
   
@@ -40,9 +96,38 @@ export default function CalendarScreen() {
     patientPhone: '',
     patientEmail: '',
     professionalName: '',
+    professionalId: '',
+    serviceId: '',
     notes: '',
   });
-  
+  const selectedClientBookingProfessional = useMemo(() => {
+    const id = String(newProfessionalAppointment.professionalId || '').trim();
+    const name = String(newProfessionalAppointment.professionalName || '').trim();
+    if (id) {
+      const byId = availableProfessionals.find((p) => String(p.id) === id);
+      if (byId) return byId;
+    }
+    if (name) {
+      return availableProfessionals.find((p) => p.name === name) ?? null;
+    }
+    return null;
+  }, [
+    availableProfessionals,
+    newProfessionalAppointment.professionalId,
+    newProfessionalAppointment.professionalName,
+  ]);
+  const consultationPriceClientBooking = useMemo(() => {
+    const p = selectedClientBookingProfessional;
+    if (p && typeof p.price === 'number' && !Number.isNaN(p.price) && p.price > 0) {
+      return p.price;
+    }
+    return CLIENT_RESERVA_TOTAL_AMOUNT;
+  }, [selectedClientBookingProfessional]);
+  const clientSeniaPreviewAmount = useMemo(
+    () => Math.max(1, Math.round(consultationPriceClientBooking * 0.2)),
+    [consultationPriceClientBooking]
+  );
+
   // Estados para los selectores modales
   const [showServiceSelectorModal, setShowServiceSelectorModal] = useState(false);
   const [showProfessionalSelectorModal, setShowProfessionalSelectorModal] = useState(false);
@@ -51,7 +136,9 @@ export default function CalendarScreen() {
   
   // Estados para búsquedas
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('Todas');
   const [professionalSearchQuery, setProfessionalSearchQuery] = useState('');
+  const [professionalClinicQuery, setProfessionalClinicQuery] = useState('');
   
   // Estados para el calendario
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -72,8 +159,31 @@ export default function CalendarScreen() {
   const [selectedTimeOld, setSelectedTimeOld] = useState('');
   const [notesOld, setNotesOld] = useState('');
   const [showDateModal, setShowDateModal] = useState(false);
-  const [markedDates, setMarkedDates] = useState({});
-  const [availableSlots, setAvailableSlots] = useState([]);
+  const [markedDates, setMarkedDates] = useState<{[key: string]: any}>({});
+  const [availableSlots, setAvailableSlots] = useState<Array<{date: string; slots: string[]}>>([]);
+
+  // Estados para configuración de disponibilidad
+  const [showAvailabilityConfigModal, setShowAvailabilityConfigModal] = useState(false);
+  const [showScheduleConfigModal, setShowScheduleConfigModal] = useState(false);
+
+  const [isSubmittingClientReserva, setIsSubmittingClientReserva] = useState(false);
+
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<{
+    id: string;
+    professionalId: string;
+    professional: string;
+    service: string;
+    date: string;
+    time: string;
+    serviceId?: string;
+  } | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('');
+  const [rescheduleMarkedDates, setRescheduleMarkedDates] = useState<Record<string, unknown>>({});
+
+  const clientCalendarUserId = String(user?._id ?? user?.id ?? '').trim();
+  const professionalCalendarUserId = clientCalendarUserId;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -95,6 +205,228 @@ export default function CalendarScreen() {
     resetNewAppointmentForm();
   };
 
+  /** Cliente: crear cita con seña en el backend y abrir pago Mercado Pago */
+  const submitClientReservaConSenaFromCalendar = async () => {
+    if (isProfessional) {
+      Alert.alert('Profesional', 'La creación de citas desde este formulario está en desarrollo. Usá la pestaña Hoy o el flujo de paciente.');
+      return;
+    }
+    const missing: string[] = [];
+    if (!newProfessionalAppointment.service?.trim()) missing.push('• Servicio');
+    if (!newProfessionalAppointment.professionalName?.trim()) missing.push('• Profesional');
+    if (!newProfessionalAppointment.date?.trim()) missing.push('• Fecha');
+    if (!newProfessionalAppointment.time?.trim()) missing.push('• Hora');
+    if (missing.length) {
+      Alert.alert(
+        'Reserva incompleta',
+        `Completá:\n\n${missing.join('\n')}`,
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
+    const clientMongoId = String(user?._id || user?.id || '').trim();
+    const professionalMongoId = resolveProfessionalMongoId(
+      false,
+      user?._id || user?.id,
+      {
+        professionalId: newProfessionalAppointment.professionalId,
+        professionalName: newProfessionalAppointment.professionalName,
+      },
+      availableProfessionals
+    );
+
+    if (!professionalMongoId || professionalMongoId.length !== 24) {
+      Alert.alert(
+        'Profesional',
+        'No se pudo determinar el ID del profesional. Elegí de nuevo el profesional en el listado.'
+      );
+      return;
+    }
+    if (!clientMongoId) {
+      Alert.alert('Sesión', 'No se pudo identificar tu usuario. Iniciá sesión nuevamente.');
+      return;
+    }
+
+    const clientRequiresSenia =
+      !!selectedClientBookingProfessional &&
+      selectedClientBookingProfessional.clientBookingRequiresDeposit !== false;
+    const clientTotalForApi = consultationPriceClientBooking;
+    const clientDepositForApi = clientRequiresSenia ? clientSeniaPreviewAmount : 0;
+
+    setIsSubmittingClientReserva(true);
+    try {
+      let appointmentDuration = 30;
+      try {
+        const availabilityResponse = await fetch(
+          `${BACKEND_URL}/api/v1/availability/${professionalMongoId}`
+        );
+        if (availabilityResponse.ok) {
+          const availabilityData = await availabilityResponse.json();
+          if (availabilityData.success && availabilityData.data?.appointmentDuration) {
+            appointmentDuration = availabilityData.data.appointmentDuration;
+          }
+        }
+      } catch {
+        /* duración por defecto */
+      }
+
+      const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = await simpleAuthService.getToken();
+      if (token) authHeaders.Authorization = `Bearer ${token}`;
+
+      const dateStr = String(newProfessionalAppointment.date).split('T')[0];
+      const patientName = user?.fullName || 'Cliente';
+
+      const response = await fetch(`${BACKEND_URL}/api/v1/appointments/create`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          professionalId: professionalMongoId,
+          clientId: clientMongoId,
+          service: newProfessionalAppointment.service,
+          date: dateStr,
+          time: newProfessionalAppointment.time,
+          duration: appointmentDuration,
+          patientName,
+          patientPhone: user?.phone || '',
+          patientEmail: user?.email || '',
+          notes: newProfessionalAppointment.notes || '',
+          status: 'pending_approval',
+          totalAmount: clientTotalForApi,
+          professional: newProfessionalAppointment.professionalName,
+          bookingSource: 'client',
+          requireDeposit: clientRequiresSenia,
+          depositAmount: clientDepositForApi,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('❌ Error creando cita (calendario):', response.status, errText);
+        Alert.alert(
+          'No se pudo reservar',
+          response.status === 409
+            ? 'Ese horario ya no está disponible. Elegí otro turno.'
+            : 'Revisá tu conexión e intentá de nuevo.'
+        );
+        return;
+      }
+
+      const savedAppointment = await response.json();
+      const mongoAppointmentId =
+        savedAppointment?.success && savedAppointment?.data?._id
+          ? String(savedAppointment.data._id)
+          : '';
+      if (!mongoAppointmentId || mongoAppointmentId.length !== 24) {
+        Alert.alert('Error', 'La respuesta del servidor no incluyó la cita. Intentá de nuevo.');
+        return;
+      }
+
+      const serverRow = savedAppointment?.data;
+      const needsDepositPayment =
+        serverRow?.status === 'pending_payment' &&
+        serverRow?.paymentStatus === 'pending' &&
+        Number(serverRow?.depositAmount) > 0;
+      const depositToCharge = Number.isFinite(Number(serverRow?.depositAmount))
+        ? Number(serverRow.depositAmount)
+        : clientDepositForApi;
+
+      try {
+        const professionalIdToUse = professionalMongoId;
+        const scheduleResponse = await fetch(
+          `${BACKEND_URL}/api/v1/date-schedules/${professionalIdToUse}/${dateStr}`
+        );
+        if (scheduleResponse.ok) {
+          const scheduleData = await scheduleResponse.json();
+          if (scheduleData.success && scheduleData.data?.timeSlots) {
+            const reservedTime = newProfessionalAppointment.time;
+            const updatedTimeSlots: { start: string; end: string; isCustom: boolean }[] = [];
+            scheduleData.data.timeSlots.forEach((slot: { start: string; end: string }) => {
+              const slotStart = slot.start;
+              const slotEnd = slot.end;
+              const reservedMinutes =
+                parseInt(reservedTime.split(':')[0], 10) * 60 +
+                parseInt(reservedTime.split(':')[1], 10);
+              const slotStartMinutes =
+                parseInt(slotStart.split(':')[0], 10) * 60 + parseInt(slotStart.split(':')[1], 10);
+              const slotEndMinutes =
+                parseInt(slotEnd.split(':')[0], 10) * 60 + parseInt(slotEnd.split(':')[1], 10);
+              if (reservedMinutes < slotStartMinutes || reservedMinutes >= slotEndMinutes) {
+                updatedTimeSlots.push({ ...slot, isCustom: false });
+              } else {
+                if (slotStartMinutes < reservedMinutes) {
+                  updatedTimeSlots.push({ start: slotStart, end: reservedTime, isCustom: false });
+                }
+                const reservedEndMinutes = reservedMinutes + appointmentDuration;
+                if (reservedEndMinutes < slotEndMinutes) {
+                  const reservedEndHour = Math.floor(reservedEndMinutes / 60);
+                  const reservedEndMin = reservedEndMinutes % 60;
+                  const reservedEndTime = `${String(reservedEndHour).padStart(2, '0')}:${String(reservedEndMin).padStart(2, '0')}`;
+                  updatedTimeSlots.push({ start: reservedEndTime, end: slotEnd, isCustom: false });
+                }
+              }
+            });
+            await fetch(`${BACKEND_URL}/api/v1/date-schedules/${professionalIdToUse}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                professionalId: professionalIdToUse,
+                professionalName: newProfessionalAppointment.professionalName,
+                date: dateStr,
+                timeSlots: updatedTimeSlots,
+                isAvailable: updatedTimeSlots.length > 0,
+              }),
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ No se pudo actualizar horarios disponibles:', e);
+      }
+
+      await addAppointment({
+        id: mongoAppointmentId,
+        professionalId: professionalMongoId,
+        professional: newProfessionalAppointment.professionalName,
+        service: newProfessionalAppointment.service,
+        date: dateStr,
+        time: newProfessionalAppointment.time,
+        patientName,
+        patientPhone: user?.phone || '',
+        patientEmail: user?.email || '',
+        notes: newProfessionalAppointment.notes || '',
+        totalAmount: clientTotalForApi,
+        status: needsDepositPayment ? 'pending_payment' : 'pending_approval',
+        clientId: clientMongoId,
+        patientId: clientMongoId,
+      });
+      await refreshAppointments();
+
+      if (needsDepositPayment) {
+        openReservaConSenaModal({
+          appointmentId: mongoAppointmentId,
+          depositAmount: depositToCharge,
+          service: newProfessionalAppointment.service,
+          date: dateStr,
+          time: newProfessionalAppointment.time,
+          professional: newProfessionalAppointment.professionalName,
+          professionalName: newProfessionalAppointment.professionalName,
+          professionalId: professionalMongoId,
+        });
+      } else {
+        Alert.alert(
+          'Solicitud enviada',
+          'Tu reserva quedó registrada. El profesional debe confirmarla; te avisaremos por notificaciones.'
+        );
+      }
+    } catch (error) {
+      console.error('❌ submitClientReservaConSenaFromCalendar:', error);
+      Alert.alert('Error', 'No se pudo completar la reserva. Intentá nuevamente.');
+    } finally {
+      setIsSubmittingClientReserva(false);
+    }
+  };
+
   // Función para resetear el formulario de nueva cita
   const resetNewAppointmentForm = () => {
     setNewProfessionalAppointment({
@@ -105,6 +437,8 @@ export default function CalendarScreen() {
       patientPhone: '',
       patientEmail: '',
       professionalName: '',
+      professionalId: '',
+      serviceId: '',
       notes: '',
     });
     setSelectedDate('');
@@ -118,6 +452,7 @@ export default function CalendarScreen() {
       ...prev,
       service: service,
       professionalName: '', // Resetear profesional al cambiar servicio
+      professionalId: '', // Evitar mantener un ID de profesional incompatible
     }));
     
     // Cerrar el selector de servicios
@@ -128,16 +463,296 @@ export default function CalendarScreen() {
     setShowModal(true);
   };
 
+  /** Meses hacia adelante con date-schedules (misma fuente que Gestión de horarios en Configuración). */
+  const DATE_SCHEDULE_MONTHS_AHEAD = 6;
+
+  // Función para cargar fechas disponibles del profesional (solo días guardados en date-schedules)
+  const loadProfessionalAvailableDates = async (professionalId: string, displayName?: string) => {
+    try {
+      console.log(
+        `📅 Cargando fechas disponibles para: ${displayName || professionalId} (id: ${professionalId})`
+      );
+
+      const isMongoId = /^[a-fA-F0-9]{24}$/.test(String(professionalId).trim());
+      if (!isMongoId) {
+        console.warn('⚠️ Profesional sin ObjectId de Mongo: no se consultan fechas en el servidor.');
+        setMarkedDates({});
+        setAvailableSlots([]);
+        return;
+      }
+      console.log(`🌐 URL Backend: ${BACKEND_URL}`);
+
+      const newMarkedDates: { [key: string]: any } = {};
+      const slotsByDate = new Map<string, string[]>();
+      const now = new Date();
+      const candidateDates = new Set<string>();
+
+      for (let i = 0; i < DATE_SCHEDULE_MONTHS_AHEAD; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        const year = d.getFullYear();
+        const month = d.getMonth() + 1;
+        const url = `${BACKEND_URL}/api/v1/date-schedules/${professionalId}/month/${year}/${month}`;
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (!data.success || !Array.isArray(data.data) || data.data.length === 0) continue;
+
+        data.data.forEach((schedule: any) => {
+          if (
+            schedule.date &&
+            schedule.timeSlots &&
+            schedule.timeSlots.length > 0 &&
+            schedule.isAvailable !== false
+          ) {
+            candidateDates.add(String(schedule.date).slice(0, 10));
+          }
+        });
+      }
+
+      const bookableList = await Promise.all(
+        [...candidateDates].map(async (dateYmd) => {
+          const bookable = await getBookableTimeSlotsForProfessionalDate(professionalId, dateYmd);
+          return { dateYmd, bookable };
+        })
+      );
+
+      for (const { dateYmd, bookable } of bookableList) {
+        if (!bookable.length) continue;
+        newMarkedDates[dateYmd] = {
+          marked: true,
+          selected: false,
+          selectedColor: '#4CAF50',
+          dotColor: '#4CAF50',
+        };
+        slotsByDate.set(dateYmd, bookable);
+      }
+
+      const newAvailableSlots = [...slotsByDate.entries()].map(([date, slots]) => ({
+        date,
+        slots,
+      }));
+
+      setMarkedDates(newMarkedDates);
+      setAvailableSlots(newAvailableSlots);
+      console.log(
+        `📆 ${Object.keys(newMarkedDates).length} fechas desde Gestión de horarios (date-schedules)`
+      );
+    } catch (error) {
+      console.error('❌ Error cargando fechas del profesional:', error);
+      setMarkedDates({});
+      setAvailableSlots([]);
+    }
+  };
+
+  /** Fechas disponibles para el modal de reprogramación (no mezcla con la reserva nueva). */
+  /** Incluye `includeDateYmd` aunque no queden franjas libres (misma fecha del turno a reprogramar). */
+  const loadRescheduleMarkedDates = async (professionalId: string, includeDateYmd?: string) => {
+    try {
+      const isMongoId = /^[a-fA-F0-9]{24}$/.test(String(professionalId).trim());
+      if (!isMongoId) {
+        setRescheduleMarkedDates({});
+        return;
+      }
+      const includeYmd = includeDateYmd ? String(includeDateYmd).slice(0, 10) : '';
+      const next: Record<string, unknown> = {};
+      const now = new Date();
+      const candidateDates = new Set<string>();
+      for (let i = 0; i < DATE_SCHEDULE_MONTHS_AHEAD; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        const year = d.getFullYear();
+        const month = d.getMonth() + 1;
+        const url = `${BACKEND_URL}/api/v1/date-schedules/${professionalId}/month/${year}/${month}`;
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (!data.success || !Array.isArray(data.data)) continue;
+        data.data.forEach((schedule: { date?: string; timeSlots?: unknown[]; isAvailable?: boolean }) => {
+          const day = schedule.date ? String(schedule.date).slice(0, 10) : '';
+          if (
+            day &&
+            schedule.timeSlots &&
+            schedule.timeSlots.length > 0 &&
+            schedule.isAvailable !== false
+          ) {
+            candidateDates.add(day);
+          }
+        });
+      }
+
+      await Promise.all(
+        [...candidateDates].map(async (day) => {
+          const bookable = await getBookableTimeSlotsForProfessionalDate(professionalId, day);
+          if (bookable.length > 0 || (includeYmd && day === includeYmd)) {
+            next[day] = {
+              marked: true,
+              selected: false,
+              selectedColor: '#4CAF50',
+              dotColor: '#4CAF50',
+            };
+          }
+        })
+      );
+
+      setRescheduleMarkedDates(next);
+    } catch {
+      setRescheduleMarkedDates({});
+    }
+  };
+
+  const closeRescheduleModal = () => {
+    setShowRescheduleModal(false);
+    setRescheduleTarget(null);
+    setRescheduleDate('');
+    setRescheduleTime('');
+    setRescheduleMarkedDates({});
+  };
+
+  const openRescheduleForAppointment = async (apt: {
+    id: string;
+    professionalId: string;
+    professional: string;
+    service: string;
+    date: string;
+    time: string;
+    serviceId?: string;
+    status: string;
+  }) => {
+    const activeClientStatus =
+      apt.status === 'confirmed' ||
+      apt.status === 'pending' ||
+      apt.status === 'pending_approval' ||
+      apt.status === 'pending_payment';
+    if (!activeClientStatus) {
+      Alert.alert('No disponible', 'Solo podés reprogramar citas activas (confirmadas o pendientes).');
+      return;
+    }
+    if (!isProfessional) {
+      const gate = canClientCancelAppointment(apt.date, apt.time);
+      if (!gate.ok) {
+        Alert.alert('No podés reprogramar', gate.message || '');
+        return;
+      }
+    }
+    setRescheduleTarget({
+      id: apt.id,
+      professionalId: apt.professionalId,
+      professional: apt.professional,
+      service: apt.service,
+      date: apt.date,
+      time: apt.time,
+      serviceId: apt.serviceId,
+    });
+    setRescheduleDate(apt.date);
+    setRescheduleTime(apt.time);
+    await loadRescheduleMarkedDates(apt.professionalId, apt.date);
+    setShowRescheduleModal(true);
+  };
+
+  const confirmReschedule = async () => {
+    if (!rescheduleTarget) return;
+    const r = isProfessional
+      ? await rescheduleAppointmentAsProfessional(
+          rescheduleTarget.id,
+          rescheduleDate,
+          rescheduleTime
+        )
+      : await rescheduleAppointmentAsClient(
+          rescheduleTarget.id,
+          rescheduleDate,
+          rescheduleTime
+        );
+    if (!r.ok) {
+      Alert.alert('No se pudo reprogramar', r.message || 'Intentá de nuevo.');
+      return;
+    }
+    Alert.alert(
+      'Cita reprogramada',
+      isProfessional
+        ? 'El turno quedó actualizado. El paciente recibirá una notificación en la app.'
+        : 'Tu turno quedó actualizado. El profesional recibirá una notificación en la app.'
+    );
+    closeRescheduleModal();
+  };
+
+  const handleCancelAppointmentFromCalendar = (apt: {
+    id: string;
+    date: string;
+    time: string;
+  }) => {
+    if (isProfessional) {
+      Alert.alert(
+        'Cancelar cita',
+        '¿Confirmás la cancelación? El paciente recibirá una notificación en la app.',
+        [
+          { text: 'No', style: 'cancel' },
+          {
+            text: 'Sí, cancelar',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const r = await cancelAppointmentAsProfessional(apt.id);
+                if (!r.ok) {
+                  Alert.alert('No se pudo cancelar', r.message || 'Intentá de nuevo.');
+                  return;
+                }
+                Alert.alert('Cita cancelada', 'La cita fue cancelada y se notificó al paciente.');
+              } catch {
+                Alert.alert('Error', 'No se pudo cancelar la cita.');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+    const gate = canClientCancelAppointment(apt.date, apt.time);
+    if (!gate.ok) {
+      Alert.alert('No podés cancelar este turno', gate.message || '');
+      return;
+    }
+    Alert.alert(
+      'Cancelar cita',
+      '¿Confirmás la cancelación? Solo está permitida con al menos 48 horas de anticipación. El profesional recibirá un aviso.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const r = await cancelAppointmentAsClient(apt.id);
+              if (!r.ok) {
+                Alert.alert('No se pudo cancelar', r.message || 'Intentá de nuevo.');
+                return;
+              }
+              Alert.alert('Cita cancelada', 'Tu cita fue cancelada y se notificó al profesional.');
+            } catch {
+              Alert.alert('Error', 'No se pudo cancelar la cita.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // Función para seleccionar un profesional
-  const handleProfessionalSelect = (professional: string) => {
-    setNewProfessionalAppointment(prev => ({
+  const handleProfessionalSelect = async (professional: {
+    id: string;
+    name: string;
+    specialty?: string;
+  }) => {
+    setNewProfessionalAppointment((prev) => ({
       ...prev,
-      professionalName: professional,
+      professionalName: professional.name,
+      professionalId: professional.id,
     }));
+
+    await loadProfessionalAvailableDates(professional.id, professional.name);
     
     // Cerrar el selector de profesionales
     setShowProfessionalSelectorModal(false);
     setProfessionalSearchQuery('');
+    setProfessionalClinicQuery('');
     
     // Volver al formulario de Crear Nueva Cita
     setShowModal(true);
@@ -145,56 +760,54 @@ export default function CalendarScreen() {
 
   // Función para obtener servicios filtrados
   const getFilteredServices = () => {
-    if (!serviceSearchQuery.trim()) return SERVICES;
-    return searchServices(serviceSearchQuery);
+    let filtered: string[] = [...SERVICES];
+    if (selectedServiceCategory !== 'Todas') {
+      filtered = getServicesByCategory(selectedServiceCategory);
+    }
+    if (serviceSearchQuery.trim()) {
+      const results = new Set<string>(searchServices(serviceSearchQuery) as string[]);
+      filtered = filtered.filter((service) => results.has(service));
+    }
+    return filtered;
   };
 
-  // Función para obtener profesionales filtrados
+  // Mismo criterio que en Hoy (index): catálogo SERVICES + directorio API + mocks
   const getFilteredProfessionals = () => {
-    const allProfessionals = [
-      'Dr. Ana Martínez - Psicología Clínica',
-      'Dr. Carlos López - Medicina General',
-      'Sofía Rodríguez - Peluquería',
-      'Lic. Emilia Vargas - Fonoaudióloga de Articulación',
-      'Lic. Benjamín Herrera - Fonoaudiólogo de Comprensión',
-      'Lic. Isidora Silva - Fonoaudiólogo de Expresión',
-      
-      // Nutricionistas
-      'Lic. Camila Torres - Nutricionista Clínica',
-      'Lic. Diego Morales - Nutricionista Deportivo',
-      'Lic. Valeria Jiménez - Nutricionista Pediátrica',
-      
-      // Fisioterapeutas
-      'Lic. Roberto Silva - Fisioterapeuta Ortopédico',
-      'Lic. Gabriela Herrera - Fisioterapeuta Neurológico',
-      'Lic. Fernando Morales - Fisioterapeuta Deportivo',
-      
-      // Odontólogos
-      'Dr. Patricia Vargas - Odontóloga General',
-      'Dr. Manuel Torres - Odontólogo Pediátrico',
-      'Dra. Lucía Morales - Ortodoncista',
-      
-      // Psicopedagogos
-      'Lic. Carmen Jiménez - Psicopedagoga',
-      'Lic. Andrés Silva - Psicopedagogo',
-      'Lic. Mariana Herrera - Psicopedagoga Especializada',
-      
-      // Terapistas Ocupacionales
-      'Lic. Rodrigo Vargas - Terapista Ocupacional',
-      'Lic. Daniela Torres - Terapista Ocupacional Pediátrica',
-      'Lic. Sebastián Morales - Terapista Ocupacional Geriátrico'
-    ];
-    
-    // Si no hay búsqueda, devolver todos los profesionales
-    if (!professionalSearchQuery.trim()) {
-      return allProfessionals;
+    const selectedService = newProfessionalAppointment.service;
+    if (!selectedService?.trim()) {
+      return [];
     }
-    
-    // Si hay búsqueda, filtrar por el término
-    const query = professionalSearchQuery.toLowerCase();
-    return allProfessionals.filter(professional => 
-      professional.toLowerCase().includes(query)
+
+    let list = availableProfessionals.filter((p) =>
+      professionalOffersService(p, selectedService, { strict: true })
     );
+
+    console.log(
+      `🔍 Calendario — servicio "${selectedService}": ${list.length} profesional(es)`
+    );
+
+    if (professionalSearchQuery.trim()) {
+      const query = professionalSearchQuery.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(query) ||
+          (p.specialty && p.specialty.toLowerCase().includes(query)) ||
+          (p.location && p.location.toLowerCase().includes(query)) ||
+          (Array.isArray(p.clinicNames) &&
+            p.clinicNames.some((n) => String(n).toLowerCase().includes(query)))
+      );
+    }
+
+    if (professionalClinicQuery.trim()) {
+      const cq = professionalClinicQuery.toLowerCase().trim();
+      list = list.filter((p) => {
+        const loc = (p.location || '').toLowerCase();
+        const clinics = Array.isArray(p.clinicNames) ? p.clinicNames : [];
+        return loc.includes(cq) || clinics.some((n) => String(n).toLowerCase().includes(cq));
+      });
+    }
+
+    return list;
   };
 
   // Función para crear preferencia de pago en MercadoPago
@@ -305,7 +918,7 @@ export default function CalendarScreen() {
       date: selectedDateOld,
       time: selectedTimeOld,
       notes: notesOld,
-      clientId: user?.id || 'cliente',
+      clientId: user?._id ?? user?.id ?? 'cliente',
       clientName: user?.fullName || 'Cliente',
     });
     
@@ -315,7 +928,7 @@ export default function CalendarScreen() {
       title: 'Nueva Solicitud de Cita',
       message: `Nueva solicitud de cita para ${selectedServiceOld}`,
       recipientId: professionalId,
-      senderId: user?.id || 'cliente',
+      senderId: user?._id ?? user?.id ?? 'cliente',
       senderName: user?.fullName || 'Cliente',
       appointmentData: {
         service: selectedServiceOld,
@@ -786,79 +1399,16 @@ export default function CalendarScreen() {
     '17:00', '17:30', '18:00', '18:30',
   ];
 
-
-
-  // Función para generar fechas marcadas y disponibilidad
-  const generateAvailability = () => {
-    const today = new Date();
-    const marked = {};
-    const slots = [];
-    
-    // Horarios predecibles para pruebas
-    const availableHours = {
-      0: [], // Domingo - no disponible
-      1: [8, 9, 10, 11, 14, 15, 16, 17], // Lunes - horario completo
-      2: [8, 9, 10, 11, 14, 15, 16, 17], // Martes - horario completo
-      3: [8, 9, 10, 11, 14, 15, 16, 17], // Miércoles - horario completo
-      4: [8, 9, 10, 11, 14, 15, 16, 17], // Jueves - horario completo
-      5: [8, 9, 10, 11, 14, 15, 16, 17], // Viernes - horario completo
-      6: [9, 10, 11, 12], // Sábado - solo mañana
-    };
-    
-    // Generar disponibilidad para los próximos 30 días
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      const dateString = date.toISOString().split('T')[0];
-      const dayOfWeek = date.getDay();
-      
-      // Excluir domingos
-      if (dayOfWeek !== 0) {
-        // Para pruebas: hacer que la mayoría de fechas estén disponibles
-        const isAvailable = i < 25; // 25 de 30 fechas disponibles para pruebas
-        
-        if (isAvailable) {
-          marked[dateString] = {
-            marked: true,
-            dotColor: '#4CAF50',
-            textColor: '#333',
-            selectedColor: '#667eea',
-          };
-          
-          // Generar horarios consistentes para pruebas
-          const daySlots = [];
-          const hoursForDay = availableHours[dayOfWeek];
-          
-          // Para pruebas: incluir la mayoría de horarios
-          for (const hour of hoursForDay) {
-            // Incluir horarios en punto
-            daySlots.push(`${hour.toString().padStart(2, '0')}:00`);
-            
-            // Incluir algunos horarios de media hora para variedad
-            if (hour < 17) { // No incluir 17:30
-              daySlots.push(`${hour.toString().padStart(2, '0')}:30`);
-            }
-          }
-          
-          slots.push({
-            date: dateString,
-            slots: daySlots,
-          });
-        }
-      }
-    }
-    
-    setMarkedDates(marked);
-    setAvailableSlots(slots);
-  };
-
-  // Efecto para generar disponibilidad cuando se selecciona un profesional
+  // Las fechas marcadas vienen solo de date-schedules (Gestión de horarios), no de datos de prueba.
   useEffect(() => {
-    if (selectedProfessionalOld) {
-      generateAvailability();
-    }
-  }, [selectedProfessionalOld]);
+    setMarkedDates({});
+    setAvailableSlots([]);
+  }, []);
+
+  // Debug: Mostrar cuándo cambian las fechas marcadas
+  useEffect(() => {
+    console.log('🔄 markedDates actualizado - Total:', Object.keys(markedDates).length);
+  }, [markedDates]);
 
   // Función para obtener horarios disponibles de una fecha específica
   const getAvailableTimeSlots = (date: string) => {
@@ -879,7 +1429,7 @@ export default function CalendarScreen() {
   };
 
   return (
-    <ConditionalScreen screenName="schedule">
+    <ConditionalScreen screenName="schedule" forceOpenScheduleModal={forceOpenScheduleModal}>
       <ScrollView 
         style={styles.container} 
         showsVerticalScrollIndicator={false}
@@ -898,8 +1448,13 @@ export default function CalendarScreen() {
           </Text>
           
           {(() => {
-            const upcomingAppointments = getUpcomingAppointments(user?.id || '');
-            console.log('🔍 Debug Calendar - Citas próximas para usuario:', user?.id);
+            const upcomingAppointments = getUpcomingAppointments(
+              isProfessional ? professionalCalendarUserId : clientCalendarUserId
+            );
+            console.log(
+              '🔍 Debug Calendar - Citas próximas para usuario:',
+              isProfessional ? professionalCalendarUserId : clientCalendarUserId
+            );
             console.log('🔍 Debug Calendar - Total de citas en el sistema:', appointments?.length || 0);
             console.log('🔍 Debug Calendar - Citas próximas encontradas:', upcomingAppointments.length);
             console.log('🔍 Debug Calendar - Citas próximas:', upcomingAppointments);
@@ -938,19 +1493,54 @@ export default function CalendarScreen() {
                         <Text style={styles.appointmentNotes}>Notas: {appointment.notes}</Text>
                       )}
                     </View>
-                    <View style={[
-                      styles.statusBadge, 
-                      { 
-                        backgroundColor: appointment.status === 'confirmed' ? '#4CAF50' : 
-                                       appointment.status === 'pending' ? '#FFC107' : '#F44336' 
-                      }
-                    ]}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        {
+                          backgroundColor:
+                            appointment.status === 'confirmed'
+                              ? '#4CAF50'
+                              : appointment.status === 'cancelled'
+                                ? '#F44336'
+                                : '#FFC107',
+                        },
+                      ]}
+                    >
                       <Text style={styles.statusText}>
-                        {appointment.status === 'confirmed' ? 'Confirmado' : 
-                         appointment.status === 'pending' ? 'Pendiente' : 'Cancelado'}
+                        {appointment.status === 'confirmed'
+                          ? 'Confirmado'
+                          : appointment.status === 'pending' ||
+                              appointment.status === 'pending_approval' ||
+                              appointment.status === 'pending_payment'
+                            ? 'Pendiente'
+                            : appointment.status === 'cancelled'
+                              ? 'Cancelado'
+                              : 'Otro'}
                       </Text>
                     </View>
                   </View>
+
+                  {(appointment.status === 'confirmed' ||
+                    appointment.status === 'pending' ||
+                    appointment.status === 'pending_approval' ||
+                    appointment.status === 'pending_payment') && (
+                    <View style={styles.appointmentClientActions}>
+                      <TouchableOpacity
+                        style={[styles.appointmentClientActionBtn, styles.appointmentRescheduleBtn]}
+                        onPress={() => openRescheduleForAppointment(appointment)}
+                      >
+                        <Ionicons name="calendar-outline" size={16} color="#e65100" />
+                        <Text style={styles.appointmentRescheduleBtnText}>Reprogramar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.appointmentClientActionBtn, styles.appointmentCancelBtn]}
+                        onPress={() => handleCancelAppointmentFromCalendar(appointment)}
+                      >
+                        <Ionicons name="close-circle-outline" size={16} color="#c62828" />
+                        <Text style={styles.appointmentCancelBtnText}>Cancelar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             });
@@ -973,14 +1563,42 @@ export default function CalendarScreen() {
                 }
               }}
             >
-              <Ionicons name="calendar-plus" size={20} color="white" />
+              <Ionicons name="add-circle" size={20} color="white" />
               <Text style={styles.actionButtonText}>
                 {isProfessional ? 'Nueva Cita (Prof)' : 'Reservar con Seña'}
               </Text>
             </TouchableOpacity>
-
-
           </View>
+
+          {/* Botones de configuración para profesionales */}
+          {isProfessional && (
+            <View style={styles.configButtonsContainer}>
+              <TouchableOpacity
+                style={styles.configButton}
+                onPress={() => {
+                  console.log('🎯 Abriendo configuración de horarios');
+                  setShowScheduleConfigModal(true);
+                }}
+              >
+                <Ionicons name="time-outline" size={20} color="#667eea" />
+                <Text style={styles.configButtonText}>Configurar Horarios</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.configButton}
+                onPress={() => {
+                  const uid = String(user?._id || user?.id || '').trim();
+                  if (uid && /^[a-fA-F0-9]{24}$/.test(uid)) {
+                    loadProfessionalAvailableDates(uid, user?.fullName);
+                  }
+                  setShowAvailabilityConfigModal(true);
+                }}
+              >
+                <Ionicons name="calendar-outline" size={20} color="#667eea" />
+                <Text style={styles.configButtonText}>Gestionar Disponibilidad</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Modal principal de reserva de cita (igual que en Hoy) */}
@@ -1129,7 +1747,27 @@ export default function CalendarScreen() {
                     styles.dateSelectorButton,
                     newProfessionalAppointment.date && styles.dateSelectorButtonValid
                   ]}
-                  onPress={() => setShowDatePickerModal(true)}
+                  onPress={async () => {
+                    let pid = '';
+                    let displayName = '';
+                    if (isProfessional) {
+                      pid = String(user?._id || user?.id || '').trim();
+                      displayName = user?.fullName || 'Profesional';
+                    } else {
+                      pid = String(
+                        newProfessionalAppointment.professionalId ||
+                          availableProfessionals.find(
+                            (p) => p.name === newProfessionalAppointment.professionalName
+                          )?.id ||
+                          ''
+                      ).trim();
+                      displayName = newProfessionalAppointment.professionalName || '';
+                    }
+                    if (pid && /^[a-fA-F0-9]{24}$/.test(pid)) {
+                      await loadProfessionalAvailableDates(pid, displayName || undefined);
+                    }
+                    setShowDatePickerModal(true);
+                  }}
                 >
                   <Text style={[
                     styles.dateSelectorText,
@@ -1147,38 +1785,16 @@ export default function CalendarScreen() {
 
               <View style={styles.formSection}>
                 <Text style={styles.formLabel}>Hora *</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.timeSelectorButton,
-                    !newProfessionalAppointment.date && styles.timeSelectorButtonDisabled,
-                    newProfessionalAppointment.time && styles.timeSelectorButtonValid
-                  ]}
-                  onPress={() => {
-                    if (newProfessionalAppointment.date) {
-                      setShowTimePickerModal(true);
-                    }
-                  }}
-                  disabled={!newProfessionalAppointment.date}
-                >
-                  <Text style={[
-                    styles.timeSelectorText,
-                    !newProfessionalAppointment.time && styles.timeSelectorPlaceholder
-                  ]}>
-                    {newProfessionalAppointment.time || 
-                      (newProfessionalAppointment.date 
-                        ? 'Seleccionar horario disponible...' 
-                        : 'Primero selecciona una fecha')}
-                  </Text>
-                  {newProfessionalAppointment.time ? (
-                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                  ) : (
-                    <Ionicons 
-                      name="time" 
-                      size={20} 
-                      color={newProfessionalAppointment.date ? "#667eea" : "#ccc"} 
-                    />
-                  )}
-                </TouchableOpacity>
+                <TimeSlotSelector
+                  selectedTime={newProfessionalAppointment.time}
+                  onTimeSelect={(time: string) => setNewProfessionalAppointment(prev => ({ ...prev, time }))}
+                  selectedDate={newProfessionalAppointment.date}
+                  professionalId={availableProfessionals.find(prof => prof.name === newProfessionalAppointment.professionalName)?.id}
+                  clinicId={user?.clinicId || '1'}
+                  serviceId={newProfessionalAppointment.serviceId || '1'}
+                  placeholder="Seleccionar horario disponible..."
+                  style={styles.timeSlotSelector}
+                />
               </View>
 
               <View style={styles.formSection}>
@@ -1194,32 +1810,48 @@ export default function CalendarScreen() {
                 />
               </View>
 
-              {/* Detalle de costos */}
-              <View style={styles.costSection}>
-                <Text style={styles.costSectionTitle}>Detalle de Costos</Text>
-                
-                <View style={styles.costRow}>
-                  <Text style={styles.costLabel}>Costo de la Consulta:</Text>
-                  <Text style={styles.costValue}>$10,000</Text>
+              {/* Detalle de costos (cliente; seña solo si el profesional la admite) */}
+              {!isProfessional && (
+                <View style={styles.costSection}>
+                  <Text style={styles.costSectionTitle}>Detalle de Costos</Text>
+                  <View style={styles.costRow}>
+                    <Text style={styles.costLabel}>Costo de la Consulta:</Text>
+                    <Text style={styles.costValue}>
+                      ${Math.round(consultationPriceClientBooking).toLocaleString('es-AR')}
+                    </Text>
+                  </View>
+                  {selectedClientBookingProfessional &&
+                    selectedClientBookingProfessional.clientBookingRequiresDeposit !== false && (
+                      <>
+                        <View style={styles.costRow}>
+                          <Text style={styles.costLabel}>Seña (20%):</Text>
+                          <Text style={styles.costValue}>
+                            ${clientSeniaPreviewAmount.toLocaleString('es-AR')}
+                          </Text>
+                        </View>
+                        <View style={styles.costRow}>
+                          <Text style={styles.costLabel}>Saldo a pagar:</Text>
+                          <Text style={styles.costTotal}>
+                            ${Math.max(
+                              0,
+                              Math.round(consultationPriceClientBooking - clientSeniaPreviewAmount)
+                            ).toLocaleString('es-AR')}
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                  <View style={styles.costNote}>
+                    <Text style={styles.costNoteText}>
+                      {selectedClientBookingProfessional &&
+                      selectedClientBookingProfessional.clientBookingRequiresDeposit !== false
+                        ? 'La seña se cobra al momento de la reserva para confirmar tu cita. El saldo se paga al finalizar el servicio.'
+                        : selectedClientBookingProfessional
+                          ? 'Este profesional no requiere seña: solo abonás el costo de la consulta según lo acordado con el consultorio.'
+                          : 'Seleccioná un profesional para ver si la reserva incluye seña.'}
+                    </Text>
+                  </View>
                 </View>
-                
-                <View style={styles.costRow}>
-                  <Text style={styles.costLabel}>Seña (20%):</Text>
-                  <Text style={styles.costValue}>$2,000</Text>
-                </View>
-                
-                <View style={styles.costRow}>
-                  <Text style={styles.costLabel}>Saldo a pagar:</Text>
-                  <Text style={styles.costTotal}>$8,000</Text>
-                </View>
-                
-                <View style={styles.costNote}>
-                  <Text style={styles.costNoteText}>
-                    💡 La seña se cobra al momento de la reserva para confirmar tu cita. 
-                    El saldo se paga al finalizar el servicio.
-                  </Text>
-                </View>
-              </View>
+              )}
 
               {/* Botones de acción */}
               <View style={styles.formActions}>
@@ -1233,11 +1865,22 @@ export default function CalendarScreen() {
                 <TouchableOpacity
                   style={[styles.formButton, styles.submitButton]}
                   onPress={() => {
-                    Alert.alert('Reserva', 'Formulario enviado correctamente');
-                    handleCloseReservaConSenaModal();
+                    if (isProfessional) {
+                      Alert.alert(
+                        'Profesional',
+                        'Usá la pestaña Hoy o el selector de paciente para crear citas confirmadas.'
+                      );
+                      return;
+                    }
+                    submitClientReservaConSenaFromCalendar();
                   }}
+                  disabled={isSubmittingClientReserva}
                 >
-                  <Text style={styles.submitButtonText}>Reservar Cita</Text>
+                  {isSubmittingClientReserva ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Reservar Cita</Text>
+                  )}
                 </TouchableOpacity>
               </View>
               
@@ -1257,7 +1900,11 @@ export default function CalendarScreen() {
             <View style={styles.modalHeader}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => setShowServiceSelectorModal(false)}
+                onPress={() => {
+                  setShowServiceSelectorModal(false);
+                  setServiceSearchQuery('');
+                  setSelectedServiceCategory('Todas');
+                }}
               >
                 <Ionicons name="arrow-back" size={24} color="#666" />
               </TouchableOpacity>
@@ -1291,6 +1938,28 @@ export default function CalendarScreen() {
                   )}
                 </View>
               </View>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.categoryScroll}
+                contentContainerStyle={styles.categoryScrollContent}
+              >
+                {SERVICE_CATEGORIES.map((category) => {
+                  const active = selectedServiceCategory === category;
+                  return (
+                    <TouchableOpacity
+                      key={category}
+                      style={[styles.categoryChip, active && styles.categoryChipActive]}
+                      onPress={() => setSelectedServiceCategory(category)}
+                    >
+                      <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+                        {category}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
               
               {/* Lista de servicios filtrados */}
               {getFilteredServices().map((service) => (
@@ -1317,7 +1986,11 @@ export default function CalendarScreen() {
             <View style={styles.modalHeader}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => setShowProfessionalSelectorModal(false)}
+                onPress={() => {
+                  setShowProfessionalSelectorModal(false);
+                  setProfessionalSearchQuery('');
+                  setProfessionalClinicQuery('');
+                }}
               >
                 <Ionicons name="arrow-back" size={24} color="#666" />
               </TouchableOpacity>
@@ -1366,18 +2039,58 @@ export default function CalendarScreen() {
                   )}
                 </View>
               </View>
+
+              <View style={[styles.searchContainer, { marginTop: 8 }]}>
+                <View style={styles.searchInputContainer}>
+                  <Ionicons name="business" size={20} color="#999" style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Filtrar por consultorio..."
+                    value={professionalClinicQuery}
+                    onChangeText={setProfessionalClinicQuery}
+                    placeholderTextColor="#999"
+                  />
+                  {professionalClinicQuery.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.clearButton}
+                      onPress={() => setProfessionalClinicQuery('')}
+                    >
+                      <Ionicons name="close-circle" size={20} color="#999" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
               
-              {/* Lista de profesionales filtrados */}
-              {getFilteredProfessionals().map((professional) => (
-                <TouchableOpacity
-                  key={professional}
-                  style={styles.professionalOption}
-                  onPress={() => handleProfessionalSelect(professional)}
-                >
-                  <Text style={styles.professionalOptionText}>{professional}</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#999" />
-                </TouchableOpacity>
-              ))}
+              {getFilteredProfessionals().length === 0 ? (
+                <View style={{ padding: 24, alignItems: 'center' }}>
+                  <Text style={{ color: '#666', textAlign: 'center' }}>
+                    {newProfessionalAppointment.service
+                      ? 'No hay profesionales para este servicio. Probá otro rubro o revisá la conexión al backend.'
+                      : 'Elegí primero un servicio para ver profesionales.'}
+                  </Text>
+                </View>
+              ) : (
+                getFilteredProfessionals().map((professional) => (
+                  <TouchableOpacity
+                    key={professional.id}
+                    style={styles.professionalOption}
+                    onPress={() => handleProfessionalSelect(professional)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.professionalOptionText}>{professional.name}</Text>
+                      {!!professional.specialty && (
+                        <Text style={{ color: '#888', fontSize: 13 }}>{professional.specialty}</Text>
+                      )}
+                      {Array.isArray(professional.clinicNames) && professional.clinicNames.length > 0 ? (
+                        <Text style={{ color: '#6366E1', fontSize: 12, marginTop: 4 }} numberOfLines={2}>
+                          {professional.clinicNames.join(' · ')}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#999" />
+                  </TouchableOpacity>
+                ))
+              )}
             </ScrollView>
           </View>
         </Modal>
@@ -1404,6 +2117,45 @@ export default function CalendarScreen() {
               <Text style={styles.calendarSubtitle}>
                 Fechas disponibles para {newProfessionalAppointment.professionalName || 'el profesional'}
               </Text>
+              
+              {/* Indicador de fechas cargadas */}
+              <View style={styles.dateIndicator}>
+                <Ionicons name={Object.keys(markedDates).length > 0 ? "checkmark-circle" : "alert-circle"} size={20} color={Object.keys(markedDates).length > 0 ? "#4CAF50" : "#FF9800"} />
+                <Text style={styles.dateIndicatorText}>
+                  {Object.keys(markedDates).length > 0 
+                    ? `${Object.keys(markedDates).length} fechas disponibles` 
+                    : 'No hay fechas disponibles cargadas'}
+                </Text>
+              </View>
+              
+              {/* Debug Info - Primeras fechas */}
+              {Object.keys(markedDates).length > 0 && (
+                <View style={styles.debugInfo}>
+                  <Text style={styles.debugInfoTitle}>🔍 Debug Info:</Text>
+                  <Text style={styles.debugInfoText}>
+                    Primeras 3: {Object.keys(markedDates).slice(0, 3).join(', ')}
+                  </Text>
+                  <Text style={styles.debugInfoText}>
+                    Últimas 3: {Object.keys(markedDates).slice(-3).join(', ')}
+                  </Text>
+                </View>
+              )}
+              
+              {/* Leyenda del calendario */}
+              <View style={styles.calendarLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendBox, styles.legendAvailable]} />
+                  <Text style={styles.legendText}>Disponible</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendBox, styles.legendToday]} />
+                  <Text style={styles.legendText}>Hoy</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendBox, styles.legendSelected]} />
+                  <Text style={styles.legendText}>Seleccionado</Text>
+                </View>
+              </View>
               
               <CustomCalendar
                 onDateSelect={(dateString) => {
@@ -1463,6 +2215,90 @@ export default function CalendarScreen() {
                 ))}
               </View>
             </View>
+          </View>
+        </Modal>
+
+        {/* Cliente: reprogramar cita desde Calendario */}
+        <Modal
+          visible={showRescheduleModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={closeRescheduleModal}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity style={styles.backButton} onPress={closeRescheduleModal}>
+                <Ionicons name="arrow-back" size={24} color="#666" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Reprogramar cita</Text>
+              <View style={styles.placeholderButton} />
+            </View>
+
+            <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+              {rescheduleTarget ? (
+                <>
+                  <Text style={styles.modalSubtitle}>
+                    {rescheduleTarget.service} · {rescheduleTarget.professional}
+                  </Text>
+                  <Text style={styles.rescheduleHint}>
+                    {isProfessional
+                      ? 'Elegí nueva fecha y horario para este paciente. Se le enviará una notificación en la app.'
+                      : 'Elegí una nueva fecha (con disponibilidad del profesional) y horario. Misma política que la cancelación: al menos 48 h antes del turno actual. El profesional recibirá un aviso.'}
+                  </Text>
+
+                  <Text style={styles.formLabel}>Nueva fecha</Text>
+                  <View style={styles.calendarContainer}>
+                    {Object.keys(rescheduleMarkedDates).length === 0 ? (
+                      <Text style={styles.rescheduleNoDates}>
+                        No hay fechas cargadas desde el servidor para este profesional. Podés escribir la
+                        fecha en formato AAAA-MM-DD abajo o probar más tarde.
+                      </Text>
+                    ) : null}
+                    <CustomCalendar
+                      onDateSelect={(dateString) => {
+                        setRescheduleDate(dateString);
+                        setRescheduleTime('');
+                      }}
+                      markedDates={rescheduleMarkedDates}
+                      selectedDate={rescheduleDate}
+                    />
+                  </View>
+
+                  <Text style={styles.formLabel}>Hora</Text>
+                  <TimeSlotSelector
+                    selectedTime={rescheduleTime}
+                    onTimeSelect={(time: string) => setRescheduleTime(time)}
+                    selectedDate={rescheduleDate}
+                    professionalId={rescheduleTarget.professionalId}
+                    clinicId={user?.clinicId || '1'}
+                    serviceId={rescheduleTarget.serviceId || '1'}
+                    placeholder="Seleccionar horario disponible..."
+                    style={styles.timeSlotSelector}
+                  />
+
+                  <View style={styles.rescheduleActions}>
+                    <TouchableOpacity
+                      style={[styles.formButton, styles.cancelButton]}
+                      onPress={closeRescheduleModal}
+                    >
+                      <Text style={styles.cancelButtonText}>Cerrar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.formButton,
+                        styles.submitButton,
+                        (!rescheduleDate || !rescheduleTime) && styles.formButtonDisabled,
+                      ]}
+                      disabled={!rescheduleDate || !rescheduleTime}
+                      onPress={confirmReschedule}
+                    >
+                      <Text style={styles.submitButtonText}>Confirmar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : null}
+              <View style={styles.bottomSpacing} />
+            </ScrollView>
           </View>
         </Modal>
 
@@ -1548,12 +2384,6 @@ export default function CalendarScreen() {
         </Modal>
        </ScrollView>
 
-       {/* Modal de Reservar Cita con Seña */}
-       {console.log('🎯 Render - Modal visible:', shouldOpenReservaConSenaModal, 'isProfessional:', isProfessional)}
-       {console.log('🎯 Condición modal:', !isProfessional && shouldOpenReservaConSenaModal)}
-       {console.log('🎯 isProfessional valor:', isProfessional)}
-       {console.log('🎯 shouldOpenReservaConSenaModal valor:', shouldOpenReservaConSenaModal)}
-       
        {/* Modal completo de Reservar Cita con Seña */}
        <Modal
          visible={!isProfessional && shouldOpenReservaConSenaModal}
@@ -1656,6 +2486,130 @@ export default function CalendarScreen() {
            </View>
          </View>
        </Modal>
+
+       {/* Modal de Configuración de Horarios */}
+       <Modal
+         visible={showScheduleConfigModal}
+         animationType="slide"
+         presentationStyle="pageSheet"
+       >
+         <View style={styles.modalContainer}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Configurar Horarios</Text>
+             <TouchableOpacity
+               style={styles.closeButton}
+               onPress={() => setShowScheduleConfigModal(false)}
+             >
+               <Ionicons name="close" size={24} color="#666" />
+             </TouchableOpacity>
+           </View>
+           <ScrollView style={styles.modalContent}>
+             <View style={styles.configSection}>
+               <Text style={styles.configSectionTitle}>⚙️ Configuración de Horarios</Text>
+               <Text style={styles.configSectionDescription}>
+                 Configura tus horarios de trabajo por defecto para cada día de la semana.
+               </Text>
+               
+               <TouchableOpacity
+                 style={styles.configActionButton}
+                 onPress={() => {
+                   Alert.alert(
+                     'Configurar Horarios',
+                     'Esta funcionalidad te llevará a la pantalla de configuración de horarios donde podrás establecer tus horarios de trabajo por día de la semana.',
+                     [
+                       { text: 'Cancelar', style: 'cancel' },
+                       { 
+                         text: 'Ir a Configuración', 
+                         onPress: () => {
+                           setShowScheduleConfigModal(false);
+                           router.push('/availability-settings');
+                         }
+                       }
+                     ]
+                   );
+                 }}
+               >
+                 <Ionicons name="time" size={20} color="#667eea" />
+                 <Text style={styles.configActionButtonText}>Configurar Horarios por Día</Text>
+                 <Ionicons name="chevron-forward" size={20} color="#667eea" />
+               </TouchableOpacity>
+             </View>
+           </ScrollView>
+         </View>
+       </Modal>
+
+       {/* Modal de Gestión de Disponibilidad */}
+       <Modal
+         visible={showAvailabilityConfigModal}
+         animationType="slide"
+         presentationStyle="pageSheet"
+       >
+         <View style={styles.modalContainer}>
+           <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Gestionar Disponibilidad</Text>
+             <TouchableOpacity
+               style={styles.closeButton}
+               onPress={() => setShowAvailabilityConfigModal(false)}
+             >
+               <Ionicons name="close" size={24} color="#666" />
+             </TouchableOpacity>
+           </View>
+           <ScrollView style={styles.modalContent}>
+             <View style={styles.configSection}>
+               <Text style={styles.configSectionTitle}>📅 Gestión de Disponibilidad</Text>
+               <Text style={styles.configSectionDescription}>
+                 Selecciona las fechas específicas en las que estarás disponible para atender pacientes.
+               </Text>
+               
+               {/* Indicador de fechas cargadas */}
+               <View style={styles.dateIndicator}>
+                 <Ionicons name={Object.keys(markedDates).length > 0 ? "checkmark-circle" : "alert-circle"} size={20} color={Object.keys(markedDates).length > 0 ? "#4CAF50" : "#FF9800"} />
+                 <Text style={styles.dateIndicatorText}>
+                   {Object.keys(markedDates).length > 0 
+                     ? `${Object.keys(markedDates).length} fechas disponibles configuradas` 
+                     : 'No hay fechas disponibles configuradas'}
+                 </Text>
+               </View>
+               
+               {/* Calendario integrado */}
+               <CustomCalendar
+                 onDateSelect={(dateString) => {
+                   Alert.alert(
+                     'Fecha Seleccionada',
+                     `Has seleccionado: ${dateString}\n\n¿Quieres cambiar la disponibilidad de esta fecha?`,
+                     [
+                       { text: 'Cancelar', style: 'cancel' },
+                       { 
+                         text: 'Configurar', 
+                         onPress: () => {
+                           console.log('Configurar disponibilidad para:', dateString);
+                           // Aquí puedes agregar lógica para marcar/desmarcar la fecha
+                         }
+                       }
+                     ]
+                   );
+                 }}
+                 markedDates={markedDates}
+                 selectedDate=""
+               />
+               
+               <View style={styles.availabilityActions}>
+                 <TouchableOpacity
+                   style={[styles.configActionButton, styles.secondaryAction]}
+                   onPress={() => {
+                     setShowAvailabilityConfigModal(false);
+                     router.push('/availability-settings');
+                   }}
+                 >
+                   <Ionicons name="settings" size={20} color="#667eea" />
+                   <Text style={styles.configActionButtonText}>Configuración Avanzada</Text>
+                   <Ionicons name="chevron-forward" size={20} color="#667eea" />
+                 </TouchableOpacity>
+               </View>
+             </View>
+           </ScrollView>
+         </View>
+       </Modal>
        </ConditionalScreen>
      );
    }
@@ -1752,6 +2706,62 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+  appointmentClientActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    gap: 10,
+  },
+  appointmentClientActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  appointmentRescheduleBtn: {
+    backgroundColor: '#fff8e1',
+    borderColor: '#ffcc80',
+  },
+  appointmentRescheduleBtnText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#e65100',
+  },
+  appointmentCancelBtn: {
+    backgroundColor: '#ffebee',
+    borderColor: '#ffcdd2',
+  },
+  appointmentCancelBtnText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#c62828',
+  },
+  rescheduleHint: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  rescheduleNoDates: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 12,
+  },
+  rescheduleActions: {
+    flexDirection: 'row',
+    marginTop: 24,
+    gap: 12,
+  },
+  formButtonDisabled: {
+    opacity: 0.45,
+  },
   actionsSection: {
     padding: 20,
     marginBottom: 30,
@@ -1792,6 +2802,78 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  configButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    gap: 12,
+  },
+  configButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#667eea',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  configButtonText: {
+    color: '#667eea',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  configSection: {
+    marginBottom: 24,
+  },
+  configSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  configSectionDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  configActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#e1e1e1',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  configActionButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+    marginLeft: 12,
+  },
+  availabilityActions: {
+    marginTop: 20,
+  },
+  secondaryAction: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#667eea',
   },
   // Estilos para el modal de reserva
   modalContainer: {
@@ -1942,6 +3024,38 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     marginBottom: 20,
+  },
+  categoryScroll: {
+    marginBottom: 14,
+    maxHeight: 44,
+  },
+  categoryScrollContent: {
+    paddingRight: 8,
+    alignItems: 'center',
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#fff',
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  categoryChipActive: {
+    backgroundColor: '#667eea',
+    borderColor: '#667eea',
+  },
+  categoryChipText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+  categoryChipTextActive: {
+    color: '#fff',
   },
   searchInputContainer: {
     flexDirection: 'row',
@@ -2159,34 +3273,13 @@ const styles = StyleSheet.create({
     elevation: 3,
     minHeight: 56,
   },
-  cancelButton: {
-    backgroundColor: 'white',
-    borderWidth: 2,
-    borderColor: '#e1e1e1',
-  },
   submitButton: {
     backgroundColor: '#667eea',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
   },
   submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
-  },
-  debugButton: {
-    backgroundColor: '#E5E7EB',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  debugButtonText: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,
@@ -2217,6 +3310,11 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '500',
     flex: 1,
+  },
+  selectorButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   timeSelectorButton: {
     flexDirection: 'row',
@@ -2386,16 +3484,91 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 4,
   },
-  calendarContainer: {
-    padding: 20,
-  },
   calendarSubtitle: {
     fontSize: 16,
     color: '#666',
     marginBottom: 20,
     textAlign: 'center',
   },
+  dateIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5E9',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  dateIndicatorText: {
+    fontSize: 14,
+    color: '#2E7D32',
+    fontWeight: '600',
+  },
+  debugInfo: {
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9800',
+  },
+  debugInfoTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#E65100',
+    marginBottom: 8,
+  },
+  debugInfoText: {
+    fontSize: 12,
+    color: '#E65100',
+    marginBottom: 4,
+    fontFamily: 'monospace',
+  },
+  calendarLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+  },
+  legendAvailable: {
+    backgroundColor: '#e8f5e9',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  legendToday: {
+    backgroundColor: '#f0f8ff',
+    borderWidth: 2,
+    borderColor: '#667eea',
+  },
+  legendSelected: {
+    backgroundColor: '#667eea',
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
   bottomSpacing: {
     height: 20,
+  },
+  
+  // Estilos para el TimeSlotSelector
+  timeSlotSelector: {
+    marginTop: 4,
   },
 });

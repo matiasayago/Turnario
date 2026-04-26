@@ -160,9 +160,79 @@ export const SERVICES = [
   'Masaje Infantil',
   'Drenaje Linfático',
   'Masaje con Piedras Calientes',
+
+  // Belleza y Estética
+  'Corte de Cabello Femenino',
+  'Corte de Cabello Masculino',
+  'Lavado y Peinado',
+  'Brushing',
+  'Coloración',
+  'Mechas',
+  'Balayage',
+  'Alisado',
+  'Botox Capilar',
+  'Tratamiento Capilar',
+  'Barbería - Corte',
+  'Barbería - Perfilado de Barba',
+  'Barbería - Afeitado',
+  'Manicuría',
+  'Pedicuría',
+  'Kapping',
+  'Esculpidas en Gel',
+  'Semipermanente',
+  'Nail Art',
+  'Lifting de Pestañas',
+  'Extensiones de Pestañas',
+  'Diseño de Cejas',
+  'Depilación Facial',
+  'Depilación Corporal',
+  'Limpieza Facial',
+  'Tratamiento Facial',
+  'Maquillaje Social',
+  'Maquillaje Novias',
+  'Cosmetología',
+  'Estética Corporal',
+
+  // Servicios con Turno (No Salud)
+  'Clases de Idiomas',
+  'Clases Particulares',
+  'Asesoría Contable',
+  'Asesoría Legal',
+  'Asesoría Migratoria',
+  'Sesión de Coaching',
+  'Asesoría Financiera',
+  'Asesoría de Imagen',
+  'Sesión de Fotografía',
+  'Estudio Fotográfico',
+  'Taller Mecánico - Diagnóstico',
+  'Taller Mecánico - Service',
+  'Gomería',
+  'Service de Aire Acondicionado',
+  'Service de Electrodomésticos',
+  'Servicio Técnico Informático',
+  'Reparación de Celulares',
+  'Reparación de PC',
 ] as const;
 
 export type ServiceType = typeof SERVICES[number];
+
+export const SERVICE_CATEGORIES = [
+  'Todas',
+  'Psicología y Salud Mental',
+  'Medicina',
+  'Fisioterapia',
+  'Terapia Ocupacional',
+  'Terapia del Lenguaje',
+  'Nutrición',
+  'Psicopedagogía',
+  'Odontología',
+  'Enfermería',
+  'Terapias Alternativas',
+  'Entrenamiento',
+  'Masajes',
+  'Belleza y Estética',
+  'Servicios con Turno',
+] as const;
 
 // Función para obtener servicios filtrados por categoría
 export const getServicesByCategory = (category: string) => {
@@ -214,6 +284,38 @@ export const getServicesByCategory = (category: string) => {
       service.includes('Masaje') || 
       service.includes('Drenaje')
     ),
+    'Belleza y Estética': SERVICES.filter(service =>
+      service.includes('Cabello') ||
+      service.includes('Peinado') ||
+      service.includes('Brushing') ||
+      service.includes('Coloración') ||
+      service.includes('Mechas') ||
+      service.includes('Balayage') ||
+      service.includes('Barbería') ||
+      service.includes('Manicuría') ||
+      service.includes('Pedicuría') ||
+      service.includes('Kapping') ||
+      service.includes('Gel') ||
+      service.includes('Semipermanente') ||
+      service.includes('Nail') ||
+      service.includes('Pestañas') ||
+      service.includes('Cejas') ||
+      service.includes('Depilación') ||
+      service.includes('Limpieza Facial') ||
+      service.includes('Cosmetología') ||
+      service.includes('Estética')
+    ),
+    'Servicios con Turno': SERVICES.filter(service =>
+      service.includes('Clases') ||
+      service.includes('Asesoría') ||
+      service.includes('Coaching') ||
+      service.includes('Fotografía') ||
+      service.includes('Taller') ||
+      service.includes('Gomería') ||
+      service.includes('Service') ||
+      service.includes('Servicio Técnico') ||
+      service.includes('Reparación')
+    ),
   };
   
   return categories[category] || [];
@@ -226,4 +328,161 @@ export const searchServices = (query: string) => {
     service && service.toLowerCase().includes(lowercaseQuery)
   );
 };
+
+const stripDiacritics = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const normKey = (s: string) =>
+  stripDiacritics((s || '').trim())
+    .toLowerCase()
+    .replace(/[?]/g, '');
+
+/**
+ * ¿El profesional puede ofrecer el servicio elegido del catálogo?
+ * - El API suele mandar un solo rubro (p. ej. "Medicina General") y el cliente elige "Consulta Médica General".
+ * - El include() exacto dejaba la lista vacía.
+ */
+export function professionalOffersService(
+  professional: {
+    services?: string[];
+    specialty?: string;
+    name?: string;
+    location?: string;
+    /** Viene del API GET /api/v1/professionals (cuenta super profesional). */
+    offersAllCatalogServices?: boolean;
+  },
+  selectedServiceName: string,
+  options?: { strict?: boolean }
+): boolean {
+  const selected = (selectedServiceName || '').trim();
+  if (!selected) return false;
+
+  if (professional.offersAllCatalogServices === true) {
+    return true;
+  }
+
+  const offers = [
+    ...(professional.services || []),
+    professional.specialty || '',
+  ].filter(Boolean) as string[];
+
+  if (offers.some((o) => o === selected)) return true;
+
+  const selN = normKey(selected);
+
+  for (const o of offers) {
+    const oN = normKey(o);
+    if (!oN) continue;
+    if (selN === oN || selN.includes(oN) || oN.includes(selN)) return true;
+  }
+
+  const tokenize = (s: string) =>
+    normKey(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
+
+  const selTokens = tokenize(selected);
+  const profTokens = offers.flatMap(tokenize);
+  if (selTokens.length && profTokens.length) {
+    for (const st of selTokens) {
+      for (const pt of profTokens) {
+        if (st === pt || st.includes(pt) || pt.includes(st)) return true;
+      }
+    }
+  }
+
+  /** Rubros amplios: alinea catálogo SERVICES con el campo `service` del usuario en Mongo. */
+  const inferClusters = (text: string): Set<string> => {
+    const n = normKey(text);
+    const out = new Set<string>();
+    if (!n) return out;
+    if (/lenguaje|habla|voz|degulsion|fluidez|articulacion|fonoaud/.test(n)) out.add('lenguaje');
+    if (/ocupacional/.test(n)) out.add('to');
+    if (/psicopedagog|aprendizaje|psicoped/.test(n)) out.add('psicoped');
+    if (
+      /psicolog|psicoanal|terapia|cognitivo|conductual|salud mental|evaluacion psic|intervencion en crisis|pareja|familiar|crisis/.test(n) &&
+      !out.has('lenguaje') &&
+      !out.has('to') &&
+      !out.has('psicoped')
+    ) {
+      out.add('psico');
+    }
+    if (
+      /medic|clinic|consulta de |consulta m|pediatr|geriatr|ginecolog|cardiolog|dermatolog|endocrinolog|gastroenterolog|neurolog|oftalmolog|otorrinolog|traumatolog|urolog|oncolog|reumatolog|neumolog/.test(
+        n
+      )
+    ) {
+      out.add('medicina');
+    }
+    if (/fisio|rehabilitacion|kinesi|puncion|electroterap|hidroterap|terapia manual|crioterap|termoterap/.test(n))
+      out.add('fisio');
+    if (/nutric/.test(n)) out.add('nutricion');
+    if (/odont|dental|ortodon|ortoped/.test(n)) out.add('odonto');
+    if (/enfermer|curacion/.test(n)) out.add('enfermeria');
+    if (/acupuntura|quiroprax|osteopat|reflexolog|aromaterap|yoga terap|pilates terap|tai chi|reiki|meditacion/.test(n))
+      out.add('alternativas');
+    if (
+      /entrenamiento|entrenador|entrenadora|coach|fitness|crossfit|musculacion|gimnasio|preparador fisico|educacion fisica|personal trainer|personal training|trainer|hiit|funcional|fuerza|cardiovascular|running|spinning/.test(
+        n
+      )
+    ) {
+      out.add('entrenamiento');
+    }
+    if (/pilates/.test(n) && !/terapeut|terapia ocup/.test(n)) out.add('entrenamiento');
+    if (/masaje|drenaje linf/.test(n)) out.add('masajes');
+    if (
+      /barber|barberia|pelu|cabello|peinado|brushing|coloracion|mechas|balayage|alisado|botox capilar|manicur|pedicur|kapping|esculpidas|semipermanente|nail art|pestanas|cejas|depilacion|cosmetolog|estetica/.test(
+        n
+      )
+    ) {
+      out.add('beauty');
+    }
+    if (
+      /clases|asesoria|coaching|fotograf|taller mecanic|gomeria|service de |servicio tecnico|reparacion/.test(
+        n
+      )
+    ) {
+      out.add('turnos_generales');
+    }
+    return out;
+  };
+
+  const selectedClusters = inferClusters(selected);
+  const professionalClusters = new Set<string>();
+  for (const o of offers) inferClusters(o).forEach((c) => professionalClusters.add(c));
+  if (selectedClusters.size && professionalClusters.size) {
+    for (const c of selectedClusters) {
+      if (professionalClusters.has(c)) return true;
+    }
+  }
+
+  const strict = options?.strict === true;
+
+  const haystack = normKey(
+    [
+      ...(professional.services || []),
+      professional.specialty || '',
+      professional.name || '',
+      professional.location || '',
+    ].join(' ')
+  );
+  if (!strict) {
+    const longTokens = normKey(selected)
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 5);
+    for (const t of longTokens) {
+      if (haystack.includes(t)) return true;
+      const stem = t.slice(0, 7);
+      if (stem.length >= 6 && haystack.includes(stem)) return true;
+    }
+  }
+
+  const meaningfulOffer = offers.some((o) => {
+    const x = normKey(o);
+    return x.length > 4 && x !== 'profesional';
+  });
+  // Modo estricto para Reservar Cita: si el profesional no tiene especialidad/rubro
+  // útil cargado, no debe aparecer como opción para el servicio seleccionado.
+  if (!meaningfulOffer) return false;
+
+  return false;
+}
 

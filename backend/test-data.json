@@ -1,0 +1,21 @@
+{
+  "professionalName": "Dr. Carlos Mendoza",
+  "daysOfWeek": {
+    "monday": true,
+    "tuesday": true,
+    "wednesday": true,
+    "thursday": true,
+    "friday": true,
+    "saturday": false,
+    "sunday": false
+  },
+  "timeSlots": ["09:00", "10:00", "11:00", "14:00", "15:00"],
+  "workingHours": {
+    "start": "09:00",
+    "end": "18:00"
+  },
+  "breakTime": {
+    "start": "13:00",
+    "end": "14:00"
+  }
+}

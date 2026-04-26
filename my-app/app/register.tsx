@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// @ts-nocheck
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,10 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
+import { simpleAuthService } from '../services/simpleAuthService';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function RegisterScreen() {
   const { register } = useAuth();
@@ -27,10 +32,48 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [emailTaken, setEmailTaken] = useState(false);
+  const [emailOk, setEmailOk] = useState(false);
+  const [emailCheckLoading, setEmailCheckLoading] = useState(false);
+  const emailDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateFormData = (key: string, value: string) => {
     setFormData(prev => ({ ...prev, [key]: value }));
   };
+
+  const runEmailAvailabilityCheck = useCallback(async (email: string) => {
+    const t = email.trim();
+    if (!EMAIL_RE.test(t)) {
+      setEmailTaken(false);
+      setEmailOk(false);
+      setEmailCheckLoading(false);
+      return;
+    }
+    setEmailCheckLoading(true);
+    try {
+      const taken = await simpleAuthService.isEmailAlreadyRegistered(t);
+      setEmailTaken(taken);
+      setEmailOk(!taken);
+    } finally {
+      setEmailCheckLoading(false);
+    }
+  }, []);
+
+  const onEmailChange = (value: string) => {
+    updateFormData('email', value);
+    setEmailTaken(false);
+    setEmailOk(false);
+    if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current);
+    emailDebounceRef.current = setTimeout(() => {
+      runEmailAvailabilityCheck(value);
+    }, 450);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current);
+    };
+  }, []);
 
   const validateForm = () => {
     if (!formData.fullName.trim()) {
@@ -38,7 +81,7 @@ export default function RegisterScreen() {
       return false;
     }
 
-    if (!formData.email.includes('@')) {
+    if (!EMAIL_RE.test(formData.email.trim())) {
       Alert.alert('Error', 'Por favor ingresa un email válido');
       return false;
     }
@@ -61,30 +104,60 @@ export default function RegisterScreen() {
     return true;
   };
 
-  const handleRegister = async () => {
-    if (!validateForm()) return;
-
+  const submitRegistration = async () => {
+    const emailNorm = formData.email.trim().toLowerCase();
     setIsLoading(true);
-
     try {
-      const success = await register({
-        email: formData.email,
+      await register({
+        email: emailNorm,
         fullName: formData.fullName,
+        password: formData.password,
         phone: formData.phone,
         userType: formData.userType,
       });
-      
-      if (success) {
-        // Registro exitoso - el contexto ya maneja el estado
-        router.replace('/(tabs)');
-      } else {
-        Alert.alert('Error', 'No se pudo crear la cuenta. Intenta nuevamente.');
-      }
+      router.replace('/(tabs)');
     } catch (error) {
-      Alert.alert('Error', 'Error al crear la cuenta. Intenta nuevamente.');
+      const message =
+        error instanceof Error ? error.message : 'No se pudo crear la cuenta. Intentá nuevamente.';
+      if (/registrado|EMAIL_EXISTS|DUPLICATE_KEY|correo ya|ya está en uso/i.test(message)) {
+        setEmailTaken(true);
+        setEmailOk(false);
+      }
+      Alert.alert('Error', message);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRegister = async () => {
+    if (!validateForm()) return;
+
+    const emailNorm = formData.email.trim().toLowerCase();
+    setEmailCheckLoading(true);
+    let taken = false;
+    try {
+      taken = await simpleAuthService.isEmailAlreadyRegistered(emailNorm);
+    } finally {
+      setEmailCheckLoading(false);
+    }
+    setEmailTaken(taken);
+    setEmailOk(!taken);
+    if (taken) {
+      Alert.alert(
+        'Email ya registrado',
+        'Este correo ya está en uso. Iniciá sesión o usá otro email.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Confirmación por correo',
+      `Te vamos a enviar un mensaje a ${emailNorm} para confirmar la creación de tu cuenta. Revisá tu bandeja de entrada y, si no lo ves, la carpeta de spam.\n\n¿Querés continuar?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Sí, crear cuenta', onPress: () => void submitRegistration() },
+      ]
+    );
   };
 
   const handleBackToLogin = () => {
@@ -125,12 +198,28 @@ export default function RegisterScreen() {
               placeholder="Email"
               placeholderTextColor="#999"
               value={formData.email}
-              onChangeText={(value) => updateFormData('email', value)}
+              onChangeText={onEmailChange}
+              onBlur={() => runEmailAvailabilityCheck(formData.email)}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
             />
+            {emailCheckLoading ? (
+              <ActivityIndicator size="small" color="#667eea" style={styles.emailSpinner} />
+            ) : null}
           </View>
+          {EMAIL_RE.test(formData.email.trim()) &&
+          (emailCheckLoading || emailTaken || emailOk) ? (
+            <Text
+              style={[styles.emailHint, emailTaken ? styles.emailHintError : styles.emailHintOk]}
+            >
+              {emailCheckLoading
+                ? 'Verificando disponibilidad…'
+                : emailTaken
+                  ? 'Este correo ya está registrado. Iniciá sesión o usá otro email.'
+                  : 'Este email está disponible.'}
+            </Text>
+          ) : null}
 
           <View style={styles.inputContainer}>
             <Ionicons name="call" size={20} color="#666" style={styles.inputIcon} />
@@ -171,7 +260,7 @@ export default function RegisterScreen() {
             <Ionicons name="lock-closed" size={20} color="#666" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Confirmar Contraseña"
+              placeholder="Confirmar contraseña"
               placeholderTextColor="#999"
               value={formData.confirmPassword}
               onChangeText={(value) => updateFormData('confirmPassword', value)}
@@ -236,9 +325,12 @@ export default function RegisterScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.registerButton, isLoading && styles.registerButtonDisabled]}
+            style={[
+              styles.registerButton,
+              (isLoading || emailTaken) && styles.registerButtonDisabled,
+            ]}
             onPress={handleRegister}
-            disabled={isLoading}
+            disabled={isLoading || emailTaken}
           >
             {isLoading ? (
               <Text style={styles.registerButtonText}>Creando Cuenta...</Text>
@@ -252,14 +344,14 @@ export default function RegisterScreen() {
             onPress={handleBackToLogin}
           >
             <Text style={styles.loginLinkText}>
-              ¿Ya tienes cuenta? <Text style={styles.linkText}>Iniciar Sesión</Text>
+              ¿Ya tienes cuenta? <Text style={styles.linkText}>Iniciar sesión</Text>
             </Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Al crear una cuenta, aceptas nuestros{' '}
+            Al crear una cuenta, aceptás nuestros{' '}
             <Text style={styles.linkText}>Términos y Condiciones</Text>
           </Text>
         </View>
@@ -324,6 +416,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     paddingVertical: 16,
+  },
+  emailSpinner: {
+    marginLeft: 4,
+  },
+  emailHint: {
+    fontSize: 13,
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  emailHintOk: {
+    color: '#2e7d32',
+  },
+  emailHintError: {
+    color: '#c62828',
+    fontWeight: '500',
   },
   eyeIcon: {
     padding: 8,

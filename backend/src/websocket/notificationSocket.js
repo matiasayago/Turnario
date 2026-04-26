@@ -1,16 +1,18 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { getCorsOriginOption } = require('../config/corsOrigins');
+const { getJwtSecret } = require('../config/jwtSecret');
 const Notification = require('../models/Notification');
 
 class NotificationSocket {
   constructor(server) {
     this.io = new Server(server, {
       cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:3000",
-        methods: ["GET", "POST"],
-        credentials: true
-      }
+        origin: getCorsOriginOption(),
+        methods: ['GET', 'POST'],
+        credentials: true,
+      },
     });
     
     this.connectedUsers = new Map(); // userId -> socketId
@@ -32,7 +34,7 @@ class NotificationSocket {
           return next(new Error('Authentication error: No token provided'));
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, getJwtSecret());
         const user = await User.findById(decoded.userId).select('_id email fullName userType');
         
         if (!user) {

@@ -168,6 +168,8 @@ const ClientTabs = () => (
 export const AppNavigator = () => {
   const { isAuthenticated, user } = useAuth();
 
+  console.log('🧭 AppNavigator - isAuthenticated:', isAuthenticated, 'user:', user?.email);
+
   return (
     <NavigationContainer>
       <Stack.Navigator

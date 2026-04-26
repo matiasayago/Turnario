@@ -1,6 +1,81 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
-  }
+    "strict": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "dom",
+      "esnext"
+    ],
+    "moduleResolution": "node",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "isolatedModules": true,
+    "noFallthroughCasesInSwitch": true,
+    "module": "esnext",
+    "target": "esnext",
+    "baseUrl": ".",
+    "paths": {
+      "1416": [
+        "./src/utils/empty-module.js"
+      ],
+      "1417": [
+        "./src/utils/empty-module.js"
+      ],
+      "1418": [
+        "./src/utils/empty-module.js"
+      ],
+      "1419": [
+        "./src/utils/empty-module.js"
+      ],
+      "1420": [
+        "./src/utils/empty-module.js"
+      ],
+      "1421": [
+        "./src/utils/empty-module.js"
+      ],
+      "1422": [
+        "./src/utils/empty-module.js"
+      ],
+      "1423": [
+        "./src/utils/empty-module.js"
+      ],
+      "1424": [
+        "./src/utils/empty-module.js"
+      ],
+      "1425": [
+        "./src/utils/empty-module.js"
+      ],
+      "1426": [
+        "./src/utils/empty-module.js"
+      ],
+      "1427": [
+        "./src/utils/empty-module.js"
+      ],
+      "1428": [
+        "./src/utils/empty-module.js"
+      ],
+      "1429": [
+        "./src/utils/empty-module.js"
+      ],
+      "1430": [
+        "./src/utils/empty-module.js"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

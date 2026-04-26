@@ -1,62 +1,51 @@
-
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  Modal,
+    Alert,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNotifications, NotificationItem } from '../../contexts/NotificationContext';
 import { useAppointments } from '../../contexts/AppointmentContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { NotificationItem, useNotifications } from '../../contexts/NotificationContext';
 import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
-import { router } from 'expo-router';
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
-  const { 
-    notifications, 
-    markAsRead, 
-    deleteNotification, 
-    getUnreadCount, 
+  const {
+    notifications,
+    markAsRead,
+    deleteNotification,
+    getUnreadCount,
     getNotificationsForUser,
-    clearAllNotifications 
+    clearAllNotifications,
+    refreshNotifications,
   } = useNotifications();
-  const { confirmAppointment, rejectAppointment, appointments } = useAppointments();
+  const { confirmAppointment, rejectAppointment, appointments, refreshAppointments } =
+    useAppointments();
   const { openReservaConSenaModal } = useReservaConSena();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const [showAppointmentDetail, setShowAppointmentDetail] = useState(false);
   
   // Obtener notificaciones del usuario actual
-  const userNotifications = getNotificationsForUser(user?.id || '');
-  
-  // Debug: Mostrar información del usuario y notificaciones
-  console.log('🔍 NotificationsScreen - Debug info:', {
-    userId: user?.id,
-    userEmail: user?.email,
-    totalNotifications: notifications.length,
-    userNotifications: userNotifications.length,
-    allNotifications: notifications.map(n => ({
-      id: n.id,
-      recipientId: n.recipientId,
-      type: n.type,
-      title: n.title || 'NO DISPONIBLE',
-      message: n.message || 'NO DISPONIBLE',
-      appointmentData: n.appointmentData || 'NO DISPONIBLE',
-      senderName: n.senderName || 'NO DISPONIBLE',
-    }))
-  });
+  const userId = String(user?._id || user?.id || '');
+  const userNotifications = getNotificationsForUser(userId);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
+    try {
+      await refreshNotifications();
+      await refreshAppointments();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleMarkAsRead = (notificationId: string) => {
@@ -89,6 +78,12 @@ export default function NotificationsScreen() {
     if (notification.type === 'appointment_request' && notification.appointmentData) {
       setSelectedNotification(notification);
       setShowAppointmentDetail(true);
+    } else if (notification.type === 'chat_message') {
+      Alert.alert(
+        notification.title || 'Mensaje',
+        `${notification.message || ''}\n\nEl chat interno fue reemplazado por WhatsApp: abrí la pestaña WhatsApp y elegí al profesional.`,
+        [{ text: 'Entendido' }]
+      );
     } else if (notification.type === 'payment_required') {
       console.log('💳 Abriendo modal de pago de seña desde notificación');
       console.log('🔍 Notificación completa:', notification);
@@ -101,6 +96,19 @@ export default function NotificationsScreen() {
       
       // NO navegar automáticamente - el modal se mostrará en la pantalla actual
       // router.push('/(tabs)/settings'); // Comentado para evitar navegación automática
+    } else if (notification.type === 'password_reset') {
+      const t = String(notification.passwordReset?.resetToken || '').trim();
+      if (t) {
+        router.push({
+          pathname: '/reset-password' as never,
+          params: { token: t },
+        });
+      } else {
+        Alert.alert(
+          'Restablecer contraseña',
+          'No hay enlace disponible. Pedí de nuevo "Olvidé mi contraseña" o revisá tu correo.'
+        );
+      }
     } else {
       console.log('ℹ️ Tipo de notificación no manejado:', notification.type);
       Alert.alert('Notificación', notification.message || 'Mensaje no disponible');
@@ -109,12 +117,18 @@ export default function NotificationsScreen() {
 
   // Función para encontrar la cita correspondiente a una notificación
   const findAppointmentByNotification = (notification: NotificationItem) => {
-    return appointments.find(appointment => 
-      appointment.service === notification.appointmentData?.service &&
-      appointment.date === notification.appointmentData?.date &&
-      appointment.time === notification.appointmentData?.time &&
-      appointment.clientName === (notification.senderName || '') &&
-      appointment.status === 'pending'
+    const aid = notification.appointmentData?.appointmentId;
+    if (aid) {
+      const byId = appointments.find((a) => String(a.id) === String(aid));
+      if (byId) return byId;
+    }
+    return appointments.find(
+      (appointment) =>
+        appointment.service === notification.appointmentData?.service &&
+        appointment.date === notification.appointmentData?.date &&
+        appointment.time === notification.appointmentData?.time &&
+        (appointment.status === 'pending' ||
+          appointment.status === 'pending_approval')
     );
   };
 
@@ -125,11 +139,20 @@ export default function NotificationsScreen() {
       case 'appointment_confirmed':
         return 'checkmark-circle';
       case 'appointment_cancelled':
+      case 'appointment_cancelled_by_client':
+      case 'appointment_cancelled_by_professional':
         return 'close-circle';
+      case 'appointment_rescheduled_by_client':
+      case 'appointment_rescheduled_by_professional':
+        return 'swap-horizontal';
       case 'reminder':
         return 'time';
       case 'payment_required':
         return 'card';
+      case 'chat_message':
+        return 'chatbubbles';
+      case 'password_reset':
+        return 'key';
       case 'system':
         return 'settings';
       default:
@@ -158,19 +181,26 @@ export default function NotificationsScreen() {
       case 'appointment_confirmed':
         return '#4CAF50'; // Verde para confirmaciones
       case 'appointment_cancelled':
+      case 'appointment_cancelled_by_client':
+      case 'appointment_cancelled_by_professional':
         return '#F44336'; // Rojo para cancelaciones
+      case 'appointment_rescheduled_by_client':
+      case 'appointment_rescheduled_by_professional':
+        return '#FF9800';
       case 'appointment_request':
         return '#2196F3'; // Azul para solicitudes
       case 'reminder':
         return '#FF9800'; // Naranja para recordatorios
+      case 'chat_message':
+        return '#667eea';
+      case 'password_reset':
+        return '#7C4DFF';
       default:
         return '#9E9E9E'; // Gris por defecto
     }
   };
 
-  const getUnreadCountForUser = () => {
-    return getUnreadCount(user?.id || '');
-  };
+  const getUnreadCountForUser = () => getUnreadCount(userId);
 
   const formatTimeAgo = (timestamp: Date) => {
     const now = new Date();
@@ -269,36 +299,6 @@ export default function NotificationsScreen() {
       )}
 
       <View style={styles.actionsSection}>
-        {/* Botón de prueba para generar notificación */}
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: '#9C27B0', marginBottom: 10 }]}
-          onPress={() => {
-            console.log('🧪 Generando notificación de prueba...');
-            // Assuming addNotification is available from useNotifications or passed as a prop
-            // For now, we'll simulate adding a dummy notification
-            // In a real app, you'd call addNotification({ ... })
-            // For this example, we'll just log and show an alert
-            Alert.alert('✅ Prueba', 'Notificación de prueba generada. Refresca la pantalla para verla.');
-          }}
-        >
-          <Ionicons name="flask" size={20} color="white" />
-          <Text style={styles.actionButtonText}>🧪 Generar Notificación de Prueba</Text>
-        </TouchableOpacity>
-
-        {/* Botón de prueba para navegación directa */}
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: '#FF5722', marginBottom: 10 }]}
-          onPress={() => {
-            console.log('🧭 Probando navegación directa a configuración...');
-            openReservaConSenaModal();
-            // NO navegar automáticamente - el modal se mostrará en la pantalla actual
-            // router.push('/(tabs)/settings');
-          }}
-        >
-          <Ionicons name="navigate" size={20} color="white" />
-          <Text style={styles.actionButtonText}>🧭 Probar Modal sin Navegación</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => {
@@ -324,7 +324,7 @@ export default function NotificationsScreen() {
                 {
                   text: 'Limpiar',
                   style: 'destructive',
-                  onPress: () => clearAllNotifications(user?.id || ''),
+                  onPress: () => clearAllNotifications(userId),
                 },
               ]
             );
@@ -334,42 +334,6 @@ export default function NotificationsScreen() {
           <Text style={styles.actionButtonText}>Limpiar todas</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Botón de prueba para simular el flujo completo */}
-      <TouchableOpacity 
-        style={{ 
-          backgroundColor: '#007AFF', 
-          padding: 12, 
-          borderRadius: 8, 
-          marginBottom: 20,
-          alignItems: 'center'
-        }}
-        onPress={() => {
-          console.log('🧪 ===== BOTÓN DE PRUEBA NOTIFICACIONES =====');
-          
-          // Simular datos de notificación de prueba
-          const testNotificationData = {
-            service: 'Consulta Psicológica',
-            professional: 'Dr Carlos Mendoza',
-            date: '2024-01-15',
-            time: '15:30',
-            notes: 'Prueba de notificación'
-          };
-          
-          console.log('🧪 Datos de prueba de notificación:', testNotificationData);
-          console.log('🧪 Llamando a openReservaConSenaModal...');
-          
-          // Llamar directamente al contexto
-          openReservaConSenaModal(testNotificationData);
-          
-          console.log('🧪 Modal abierto - NO navegando automáticamente');
-          // router.push('/(tabs)/settings'); // Comentado para evitar navegación automática
-        }}
-      >
-        <Text style={{ color: 'white', fontSize: 14, fontWeight: 'bold' }}>
-          🧪 Probar Flujo Completo (Notificación → Modal)
-        </Text>
-      </TouchableOpacity>
 
       {/* Modal de Detalle de Cita */}
       <Modal
@@ -442,27 +406,26 @@ export default function NotificationsScreen() {
                           {
                             text: 'Confirmar',
                             style: 'default',
-                            onPress: () => {
+                            onPress: async () => {
                               if (selectedNotification) {
                                 const appointment = findAppointmentByNotification(selectedNotification);
-                                if (appointment) {
-                                  // Confirmar la cita usando el contexto
-                                  confirmAppointment(appointment.id);
-                                  
-                                  // Enviar notificación al cliente
-                                  // Assuming addNotification is available from useNotifications or passed as a prop
-                                  // For now, we'll simulate adding a dummy notification
-                                  // In a real app, you'd call addNotification({ ... })
+                                const mongoId =
+                                  selectedNotification.appointmentData?.appointmentId ||
+                                  appointment?.id;
+                                if (mongoId) {
+                                  await confirmAppointment(String(mongoId));
+                                  await refreshAppointments();
+                                  await refreshNotifications();
                                   Alert.alert(
-                                    '✅ Cita Confirmada', 
-                                    'La cita ha sido confirmada exitosamente. El cliente recibirá una notificación.'
+                                    '✅ Cita confirmada',
+                                    'La cita quedó confirmada. El cliente verá el aviso en notificaciones.'
                                   );
                                   setShowAppointmentDetail(false);
                                   setSelectedNotification(null);
                                 } else {
                                   Alert.alert(
-                                    '❌ Error', 
-                                    'No se pudo encontrar la cita correspondiente. Inténtalo de nuevo.'
+                                    '❌ Error',
+                                    'No se pudo identificar la cita. Probá de nuevo.'
                                   );
                                 }
                               }
@@ -487,26 +450,26 @@ export default function NotificationsScreen() {
                           {
                             text: 'Rechazar',
                             style: 'destructive',
-                            onPress: () => {
+                            onPress: async () => {
                               if (selectedNotification) {
                                 const appointment = findAppointmentByNotification(selectedNotification);
-                                if (appointment) {
-                                  // Rechazar la cita usando el contexto
-                                  rejectAppointment(appointment.id);
-                                  
-                                  // Enviar notificación al cliente
-                                  // Assuming addNotification is available from useNotifications or passed as a prop
-                                  // For now, we'll simulate adding a dummy notification
+                                const mongoId =
+                                  selectedNotification.appointmentData?.appointmentId ||
+                                  appointment?.id;
+                                if (mongoId) {
+                                  await rejectAppointment(String(mongoId));
+                                  await refreshAppointments();
+                                  await refreshNotifications();
                                   Alert.alert(
-                                    '❌ Cita Rechazada', 
-                                    'La cita ha sido rechazada. El cliente recibirá una notificación.'
+                                    'Cita rechazada',
+                                    'Se notificó al cliente que la solicitud no pudo confirmarse.'
                                   );
                                   setShowAppointmentDetail(false);
                                   setSelectedNotification(null);
                                 } else {
                                   Alert.alert(
-                                    '❌ Error', 
-                                    'No se pudo encontrar la cita correspondiente. Inténtalo de nuevo.'
+                                    '❌ Error',
+                                    'No se pudo identificar la cita.'
                                   );
                                 }
                               }

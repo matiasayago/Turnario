@@ -1,20 +1,85 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
+const mongoose = require('mongoose');
+const { body, query, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
 const { authenticateToken, requireRole } = require('../middleware/auth');
+const { getJwtSecret } = require('../config/jwtSecret');
+const EmailService = require('../services/emailService');
 
 const router = express.Router();
+const emailService = EmailService.getSingleton();
 
 // Generar token JWT
 const generateToken = (userId) => {
   return jwt.sign(
     { userId },
-    process.env.JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 };
+
+// @route   GET /api/auth/check-email
+// @desc    Indica si el email ya está registrado (consulta MongoDB)
+// @access  Public
+router.get(
+  '/check-email',
+  [
+    query('email')
+      .trim()
+      .notEmpty()
+      .withMessage('Email requerido')
+      .isEmail()
+      .withMessage('Email inválido')
+      .normalizeEmail(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          available: false,
+          message: 'Email inválido',
+          errors: errors.array(),
+        });
+      }
+
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({
+          success: false,
+          available: null,
+          message:
+            'Base de datos no disponible. Iniciá MongoDB y revisá MONGODB_URI en .env del backend.',
+          error: 'DATABASE_UNAVAILABLE',
+        });
+      }
+
+      const emailNorm = String(req.query.email || '')
+        .trim()
+        .toLowerCase();
+      const existingUser = await User.findByEmail(emailNorm);
+      const taken = !!existingUser;
+
+      return res.json({
+        success: true,
+        email: emailNorm,
+        available: !taken,
+        taken,
+      });
+    } catch (err) {
+      console.error('Error en check-email:', err);
+      return res.status(500).json({
+        success: false,
+        available: null,
+        message: 'No se pudo verificar el email',
+        error: 'INTERNAL_ERROR',
+      });
+    }
+  }
+);
 
 // @route   POST /api/auth/register
 // @desc    Registrar nuevo usuario
@@ -29,8 +94,8 @@ router.post('/register', [
     .withMessage('La contraseña debe tener al menos 6 caracteres'),
   body('fullName')
     .trim()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('El nombre debe tener entre 2 y 100 caracteres'),
+    .isLength({ min: 1, max: 100 })
+    .withMessage('El nombre debe tener entre 1 y 100 caracteres'),
   body('userType')
     .isIn(['client', 'professional'])
     .withMessage('Tipo de usuario inválido'),
@@ -50,25 +115,56 @@ router.post('/register', [
       });
     }
 
-    const { email, password, fullName, userType, phone, dateOfBirth, address } = req.body;
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Base de datos no disponible. Iniciá MongoDB (local o Atlas), revisá MONGODB_URI en .env del backend y reiniciá el servidor.',
+        error: 'DATABASE_UNAVAILABLE',
+        details: `readyState=${mongoose.connection.readyState} (1=conectado)`,
+      });
+    }
 
-    // Verificar si el usuario ya existe
-    const existingUser = await User.findByEmail(email);
+    const { email, password, fullName, userType, phone, dateOfBirth, address } = req.body;
+    const emailNorm = String(email || '').trim().toLowerCase();
+    if (!emailNorm) {
+      return res.status(400).json({
+        success: false,
+        message: 'El email es requerido',
+        error: 'EMAIL_REQUIRED',
+      });
+    }
+
+    let phoneNorm = phone != null && String(phone).trim() !== '' ? String(phone).trim() : '';
+    if (phoneNorm) {
+      phoneNorm = phoneNorm.replace(/[\s\-\.\(\)]/g, '');
+      if (!phoneNorm.startsWith('+')) {
+        phoneNorm = '+' + phoneNorm.replace(/\D/g, '').replace(/^0+/, '');
+      } else {
+        phoneNorm = '+' + phoneNorm.slice(1).replace(/\D/g, '');
+      }
+    }
+    if (!phoneNorm || !/^\+[1-9]\d{0,15}$/.test(phoneNorm)) {
+      phoneNorm = '+10000000001';
+    }
+
+    // Verificar si el usuario ya existe (misma normalización que al guardar)
+    const existingUser = await User.findByEmail(emailNorm);
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'El email ya está registrado',
-        error: 'EMAIL_EXISTS'
+        message: 'El email ya está registrado. Usá otro correo o iniciá sesión.',
+        error: 'EMAIL_EXISTS',
       });
     }
 
     // Crear nuevo usuario
     const userData = {
-      email,
+      email: emailNorm,
       password,
       fullName,
       userType,
-      phone
+      phone: phoneNorm
     };
 
     // Agregar campos opcionales si están presentes
@@ -94,11 +190,40 @@ router.post('/register', [
     });
 
   } catch (error) {
-    console.error('Error en registro:', error);
+    console.error('Error en registro:', error && error.stack ? error.stack : error);
+    if (error.name === 'ValidationError') {
+      const first = Object.values(error.errors || {})[0];
+      const msg = first && first.message ? first.message : 'Datos de usuario inválidos';
+      return res.status(400).json({
+        success: false,
+        message: msg,
+        error: 'VALIDATION_ERROR',
+      });
+    }
+    const code = error.code;
+    if (code === 11000) {
+      const key = error.keyPattern && typeof error.keyPattern === 'object' ? error.keyPattern : {};
+      const field = Object.keys(key)[0] || 'email';
+      const msg =
+        field === 'email' ? 'El email ya está registrado' : `Ya existe un registro con ese ${field}`;
+      return res.status(400).json({
+        success: false,
+        message: msg,
+        error: 'DUPLICATE_KEY',
+      });
+    }
+    const safeMsg =
+      error instanceof Error && error.message && !/secret|password|key/i.test(error.message)
+        ? error.message
+        : 'Error interno del servidor';
+    const detailStr =
+      error instanceof Error ? error.message : error != null ? String(error) : 'unknown';
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: 'INTERNAL_ERROR'
+      // Misma lógica que safeMsg (sin texto sensible); en producción también sirve para depurar registro sin filtrar a ciegas
+      message: safeMsg,
+      error: 'INTERNAL_ERROR',
+      details: detailStr,
     });
   }
 });
@@ -126,10 +251,21 @@ router.post('/login', [
       });
     }
 
-    const { email, password } = req.body;
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Base de datos no disponible. Iniciá MongoDB y revisá MONGODB_URI en .env del backend.',
+        error: 'DATABASE_UNAVAILABLE',
+        details: `readyState=${mongoose.connection.readyState}`,
+      });
+    }
 
-    // Buscar usuario por email (incluyendo contraseña)
-    const user = await User.findOne({ email }).select('+password');
+    const { email, password } = req.body;
+    const emailNorm = String(email || '').trim().toLowerCase();
+
+    // Buscar usuario por email (incluyendo contraseña), misma normalización que en registro
+    const user = await User.findOne({ email: emailNorm }).select('+password');
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -182,6 +318,50 @@ router.post('/login', [
   }
 });
 
+// @route   POST /api/auth/google/check
+// @desc    Indica si ya existe usuario con este Google ID o email (para pedir cliente/profesional solo al alta)
+// @access  Public
+router.post('/google/check', [
+  body('googleId').notEmpty().withMessage('Google ID es requerido'),
+  body('email').isEmail().withMessage('Email inválido').normalizeEmail(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Datos inválidos',
+        errors: errors.array(),
+      });
+    }
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Base de datos no disponible',
+        error: 'DATABASE_UNAVAILABLE',
+      });
+    }
+    const { googleId, email } = req.body;
+    const emailNorm = String(email || '').trim().toLowerCase();
+    const user = await User.findOne({
+      $or: [{ googleId: String(googleId) }, { email: emailNorm }],
+    })
+      .select('_id')
+      .lean();
+    return res.json({
+      success: true,
+      exists: Boolean(user),
+    });
+  } catch (err) {
+    console.error('Error en google/check:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: 'INTERNAL_ERROR',
+    });
+  }
+});
+
 // @route   POST /api/auth/google
 // @desc    Login con Google
 // @access  Public
@@ -196,7 +376,11 @@ router.post('/google', [
   body('fullName')
     .trim()
     .isLength({ min: 2, max: 100 })
-    .withMessage('El nombre debe tener entre 2 y 100 caracteres')
+    .withMessage('El nombre debe tener entre 2 y 100 caracteres'),
+  body('userType')
+    .optional()
+    .isIn(['client', 'professional'])
+    .withMessage('Tipo de usuario inválido (solo client o professional)'),
 ], async (req, res) => {
   try {
     // Verificar errores de validación
@@ -209,11 +393,14 @@ router.post('/google', [
       });
     }
 
-    const { googleId, email, fullName, userType = 'client' } = req.body;
+    const { googleId, email, fullName, userType: incomingUserType } = req.body;
+    const emailNorm = String(email || '').trim().toLowerCase();
+    const newUserType =
+      incomingUserType === 'professional' ? 'professional' : 'client';
 
     // Buscar usuario existente por Google ID o email
     let user = await User.findOne({
-      $or: [{ googleId }, { email }]
+      $or: [{ googleId }, { email: emailNorm }]
     });
 
     if (user) {
@@ -223,16 +410,18 @@ router.post('/google', [
         await user.save();
       }
     } else {
-      // Crear nuevo usuario
+      const randomPassword = `${Math.random().toString(36).slice(-10)}Aa1!`;
       user = new User({
         googleId,
-        email,
+        email: emailNorm,
         fullName,
-        userType,
-        password: Math.random().toString(36).slice(-8), // Contraseña aleatoria
-        emailVerified: true,
-        isVerified: true
+        userType: newUserType,
+        phone: '+10000000001',
+        password: randomPassword,
       });
+      if (!user.status) user.status = {};
+      user.status.emailVerified = true;
+      user.status.isVerified = true;
       await user.save();
     }
 
@@ -266,6 +455,116 @@ router.post('/google', [
       success: false,
       message: 'Error interno del servidor',
       error: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/apple
+// @desc    Login / registro con Sign in with Apple (appleUserId = credential.user)
+// @access  Public
+router.post('/apple', [
+  body('appleUserId')
+    .trim()
+    .notEmpty()
+    .withMessage('appleUserId es requerido'),
+  body('email')
+    .optional()
+    .isEmail()
+    .withMessage('Email inválido')
+    .normalizeEmail(),
+  body('fullName')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Nombre inválido'),
+  body('userType')
+    .optional()
+    .isIn(['client', 'professional', 'admin'])
+    .withMessage('Tipo de usuario inválido'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Datos de entrada inválidos',
+        errors: errors.array(),
+      });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Base de datos no disponible. Iniciá MongoDB y revisá MONGODB_URI en .env del backend.',
+        error: 'DATABASE_UNAVAILABLE',
+      });
+    }
+
+    const { appleUserId, email, fullName, userType = 'client' } = req.body;
+    const emailNorm = email != null && String(email).trim() !== '' ? String(email).trim().toLowerCase() : '';
+
+    let user = await User.findOne({ appleId: appleUserId });
+    if (!user && emailNorm) {
+      user = await User.findOne({ email: emailNorm });
+    }
+
+    if (user) {
+      if (!user.appleId) {
+        user.appleId = appleUserId;
+        await user.save();
+      }
+    } else {
+      const safeId = String(appleUserId).replace(/[^a-zA-Z0-9]/g, '').slice(0, 80) || 'user';
+      const syntheticEmail = emailNorm || `apple_${safeId}@users.turnario.app`;
+      const name = (fullName && String(fullName).trim()) || 'Usuario Apple';
+      const randomPassword = `${Math.random().toString(36).slice(-10)}Aa1!`;
+      user = new User({
+        appleId: appleUserId,
+        email: syntheticEmail,
+        fullName: name,
+        userType,
+        phone: '+10000000001',
+        password: randomPassword,
+      });
+      if (!user.status) user.status = {};
+      user.status.emailVerified = !!emailNorm;
+      user.status.isVerified = true;
+      await user.save();
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'Cuenta desactivada',
+        error: 'ACCOUNT_DISABLED',
+      });
+    }
+
+    const token = generateToken(user._id);
+    await user.updateLastLogin();
+
+    res.json({
+      success: true,
+      message: 'Login con Apple exitoso',
+      data: {
+        user: user.getPublicProfile(),
+        token,
+      },
+    });
+  } catch (error) {
+    console.error('Error en login con Apple:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ya existe una cuenta con esos datos. Probá iniciar sesión con email.',
+        error: 'DUPLICATE_KEY',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: 'INTERNAL_ERROR',
     });
   }
 });
@@ -458,16 +757,15 @@ router.post('/change-password', [
 });
 
 // @route   POST /api/auth/forgot-password
-// @desc    Solicitar restablecimiento de contraseña
+// @desc    Solicitar restablecimiento de contraseña por email con token
 // @access  Public
 router.post('/forgot-password', [
   body('email')
+    .trim()
     .isEmail()
     .withMessage('Email inválido')
-    .normalizeEmail()
 ], async (req, res) => {
   try {
-    // Verificar errores de validación
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -477,32 +775,122 @@ router.post('/forgot-password', [
       });
     }
 
-    const { email } = req.body;
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
-    // Buscar usuario
-    const user = await User.findByEmail(email);
-    if (!user) {
-      // Por seguridad, no revelamos si el email existe o no
-      return res.json({
-        success: true,
-        message: 'Si el email existe, se enviará un enlace de restablecimiento'
-      });
+    const user = await User.findOne({
+      email,
+      deletedAt: { $exists: false },
+    }).select('_id email fullName').lean();
+
+    if (user && user._id) {
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            'security.passwordResetToken': resetToken,
+            'security.passwordResetExpires': expiresAt,
+          },
+          $unset: {
+            'security.passwordResetOtpHash': 1,
+          },
+        }
+      );
+
+      await emailService.ensureReady();
+      if (!emailService.transporter) {
+        return res.status(503).json({
+          success: false,
+          message: 'El servicio de email no está disponible.',
+          error: 'EMAIL_SERVICE_UNAVAILABLE',
+        });
+      }
+
+      try {
+        await emailService.sendPasswordReset(user, resetToken);
+      } catch (sendErr) {
+        await User.updateOne(
+          { _id: user._id },
+          { $unset: { 'security.passwordResetToken': 1, 'security.passwordResetExpires': 1 } }
+        ).catch(() => {});
+        return res.status(502).json({
+          success: false,
+          message: 'No se pudo enviar el email de recuperación. Intentá nuevamente.',
+          error: 'EMAIL_SEND_FAILED',
+        });
+      }
     }
 
-    // En una implementación real, aquí se enviaría un email
-    // con un token de restablecimiento
-
-    res.json({
+    return res.json({
       success: true,
-      message: 'Si el email existe, se enviará un enlace de restablecimiento'
+      message: 'Si el email existe, se enviará un enlace de restablecimiento',
     });
-
   } catch (error) {
     console.error('Error en forgot password:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',
       error: 'INTERNAL_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/reset-password
+// @desc    Restablecer contraseña con token
+// @access  Public
+router.post('/reset-password', [
+  body('token')
+    .trim()
+    .notEmpty()
+    .withMessage('Token requerido'),
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('La contraseña debe tener al menos 6 caracteres'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Datos de entrada inválidos',
+        errors: errors.array(),
+      });
+    }
+
+    const token = String(req.body.token || '').trim();
+    const newPassword = String(req.body.password || '');
+    const now = new Date();
+
+    const user = await User.findOne({
+      'security.passwordResetToken': token,
+      'security.passwordResetExpires': { $gt: now },
+    }).select('+password');
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido o expirado',
+        error: 'INVALID_RESET_TOKEN',
+      });
+    }
+
+    user.password = newPassword;
+    user.security.passwordResetToken = undefined;
+    user.security.passwordResetExpires = undefined;
+    user.security.passwordResetOtpHash = undefined;
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'Contraseña restablecida exitosamente',
+    });
+  } catch (error) {
+    console.error('Error en reset password:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: 'INTERNAL_ERROR',
     });
   }
 });
