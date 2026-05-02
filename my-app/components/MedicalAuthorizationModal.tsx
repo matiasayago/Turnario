@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useMedicalAuthorization,
   type PatientProfessionalRelationship,
@@ -38,10 +39,37 @@ function relationshipTypeLabel(type: string): string {
   }
 }
 
+function accessTypeLabel(type: string): string {
+  const raw = String(type || '').trim().toLowerCase();
+  if (raw === 'access_denied') return 'Acceso denegado';
+  if (raw === 'access_granted') return 'Acceso autorizado';
+  if (raw === 'access_requested') return 'Solicitud de acceso';
+  if (raw === 'access_revoked') return 'Acceso revocado';
+  return raw ? raw.replace(/_/g, ' ') : 'Evento';
+}
+
+function recordTypeLabel(type: string): string {
+  const raw = String(type || '').trim().toLowerCase();
+  if (raw === 'consultation') return 'Consulta';
+  if (raw === 'document') return 'Documento';
+  if (raw === 'prescription') return 'Prescripción';
+  if (raw === 'treatment') return 'Tratamiento';
+  if (raw === 'labresult' || raw === 'lab_result') return 'Laboratorio';
+  if (raw === 'imaging') return 'Imágenes';
+  return raw ? raw.replace(/_/g, ' ') : 'Registro';
+}
+
+function shortPatientRef(patientId: string): string {
+  const id = String(patientId || '').trim();
+  if (!id) return '—';
+  return id.length > 10 ? `···${id.slice(-6)}` : id;
+}
+
 export const MedicalAuthorizationModal: React.FC<MedicalAuthorizationModalProps> = ({
   visible,
   onClose,
 }) => {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const {
     authorizations,
@@ -335,14 +363,14 @@ export const MedicalAuthorizationModal: React.FC<MedicalAuthorizationModalProps>
   const renderAccessLogItem = ({ item }: { item: any }) => (
     <View style={styles.logItem}>
       <View style={styles.logHeader}>
-        <Text style={styles.logType}>{item.accessType}</Text>
+        <Text style={styles.logType}>{accessTypeLabel(item.accessType)}</Text>
         <Text style={styles.logDate}>
           {new Date(item.accessDate).toLocaleString()}
         </Text>
       </View>
       
       <Text style={styles.logDetails}>
-        Paciente: {item.patientId} | Registro: {item.recordType}
+        Paciente: {shortPatientRef(item.patientId)} | Registro: {recordTypeLabel(item.recordType)}
       </Text>
       
       <View style={styles.logStatus}>
@@ -366,7 +394,7 @@ export const MedicalAuthorizationModal: React.FC<MedicalAuthorizationModalProps>
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top + 10, 20) }]}>
           <Text style={styles.headerTitle}>Gestión de Autorizaciones Médicas</Text>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <Ionicons name="close" size={24} color="#333" />
@@ -490,8 +518,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2196F3',
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
+    fontWeight: '500',
   },
   activeTabText: {
     color: '#2196F3',
@@ -697,14 +726,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
+    textTransform: 'capitalize',
   },
   logDate: {
     fontSize: 12,
     color: '#999',
+    marginLeft: 8,
   },
   logDetails: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    color: '#555',
     marginBottom: 8,
   },
   logStatus: {

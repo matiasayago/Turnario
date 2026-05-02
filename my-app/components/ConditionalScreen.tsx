@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBackendBaseUrl } from '../config/backend';
 import { useAppointments } from '../contexts/AppointmentContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -1948,6 +1949,11 @@ const generateDefaultSchedule = () => {
 
 // Pantalla de Horarios Profesional
 function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceOpenScheduleModal?: boolean }) {
+  const insets = useSafeAreaInsets();
+  const modalActionPaddingBottom =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 24, 44)
+      : Math.max(insets.bottom + 12, 24);
   const { user, toggleUserType } = useAuth();
   const params = useLocalSearchParams<{ manageSchedule?: string }>();
   const router = useRouter();
@@ -2973,17 +2979,33 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
         onRequestClose={closeScheduleModal}
       >
         <View style={{ flex: 1, backgroundColor: '#f5f6fb' }}>
-          <View style={{ backgroundColor: '#667eea', paddingTop: 50, paddingHorizontal: 16, paddingBottom: 12 }}>
+          <View
+            style={{
+              backgroundColor: '#667eea',
+              paddingTop: Math.max(insets.top + 12, 50),
+              paddingHorizontal: 16,
+              paddingBottom: 12,
+            }}
+          >
             <TouchableOpacity
               onPress={closeScheduleModal}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={{ position: 'absolute', left: 12, top: 52, padding: 8, zIndex: 20 }}
+              style={{
+                position: 'absolute',
+                left: 12,
+                top: Math.max(insets.top + 14, 52),
+                padding: 8,
+                zIndex: 20,
+              }}
             >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
             <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center' }}>⏰ Gestión de Horarios</Text>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom + 120, 140) }}
+          >
             <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 }}>
               <Text style={{ fontSize: 22, fontWeight: '700', color: '#222', marginBottom: 6 }}>📅 Seleccionar Fechas Disponibles</Text>
               <Text style={{ fontSize: 16, color: '#6b7280', marginBottom: 12 }}>
@@ -3150,7 +3172,22 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
             </View>
           </ScrollView>
 
-          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eceef4', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', gap: 10 }}>
+          <View
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: '#fff',
+              borderTopWidth: 1,
+              borderTopColor: '#eceef4',
+              paddingHorizontal: 16,
+              paddingTop: 10,
+              paddingBottom: Math.max(insets.bottom + 10, 20),
+              flexDirection: 'row',
+              gap: 10,
+            }}
+          >
             <TouchableOpacity
               onPress={() => {
                 setSelectedDates([]);
@@ -3287,7 +3324,7 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
             </View>
           </ScrollView>
 
-          <View style={styles.modalActions}>
+          <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={() => setShowAddScheduleModal(false)}
@@ -4495,7 +4532,7 @@ function ProfessionalPatientsScreen() {
             </View>
           </ScrollView>
 
-          <View style={styles.modalActions}>
+          <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={handleCancelAddPatient}
@@ -4611,7 +4648,7 @@ function ProfessionalPatientsScreen() {
             )}
           </ScrollView>
 
-          <View style={styles.modalActions}>
+          <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={handleCancelSchedule}
@@ -4856,7 +4893,7 @@ function ProfessionalPatientsScreen() {
             )}
           </ScrollView>
 
-          <View style={styles.modalActions}>
+          <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={() => setShowEditPatientModal(false)}

@@ -30,6 +30,7 @@ const subscriptionsGooglePlayRoutes = require('./routes/subscriptionsGooglePlay'
 const ExpoAppointment = require('./models/ExpoAppointment');
 const ExpoNotification = require('./models/ExpoNotification');
 const ExpoChatMessage = require('./models/ExpoChatMessage');
+const MercadoPagoWebhookEvent = require('./models/MercadoPagoWebhookEvent');
 const User = require('./models/User');
 const { authenticateToken } = require('./middleware/auth');
 const { getCorsOriginOption } = require('./config/corsOrigins');
@@ -73,6 +74,18 @@ const notificationSocket = new NotificationSocket(server);
 const emailService = EmailService.getSingleton();
 const mercadopagoService = new MercadoPagoService();
 const geolocationService = new GeolocationService();
+
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  const mpCfg = mercadopagoService.getConfigurationStatus
+    ? mercadopagoService.getConfigurationStatus()
+    : { ok: false, missing: ['mercadopagoService'] };
+  if (!mpCfg.ok) {
+    console.error(
+      `❌ MercadoPago configuración inválida en producción. Faltan: ${mpCfg.missing.join(', ')}`
+    );
+    process.exit(1);
+  }
+}
 
 // Middleware de seguridad
 app.use(helmet({
@@ -235,6 +248,21 @@ app.post('/api/payments/webhook', async (req, res) => {
     const webhookResult = await mercadopagoService.processPaymentWebhookById(
       paymentId
     );
+    try {
+      await MercadoPagoWebhookEvent.create({
+        paymentId,
+        topic: 'payment',
+        externalReference: String(webhookResult?.payment?.externalReference || ''),
+        status: String(webhookResult?.payment?.status || ''),
+        statusDetail: String(webhookResult?.payment?.statusDetail || ''),
+        transactionAmount: Number(webhookResult?.payment?.transactionAmount || 0),
+        processed: Boolean(webhookResult?.verified),
+        rawBody: req.body || null,
+        rawQuery: req.query || null,
+      });
+    } catch (auditErr) {
+      console.warn('MercadoPagoWebhookEvent create:', auditErr.message || auditErr);
+    }
 
     if (webhookResult.verified && webhookResult.payment && notificationSocket) {
       const payment = webhookResult.payment;
@@ -270,6 +298,18 @@ app.post('/api/payments/webhook', async (req, res) => {
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error('Error processing webhook:', error);
+    try {
+      await MercadoPagoWebhookEvent.create({
+        paymentId: String((req.body && req.body.data && req.body.data.id) || req.query?.id || req.query?.['data.id'] || ''),
+        topic: 'payment',
+        processed: false,
+        error: String(error?.message || error),
+        rawBody: req.body || null,
+        rawQuery: req.query || null,
+      });
+    } catch (auditErr) {
+      console.warn('MercadoPagoWebhookEvent error-audit:', auditErr.message || auditErr);
+    }
     return res.status(200).send('ok');
   }
 });
@@ -1961,6 +2001,9 @@ app.post('/api/v1/whatsapp/preferences', authenticateToken, express.json(), asyn
 });
 
 const sendHealth = (req, res) => {
+  const mpCfg = mercadopagoService.getConfigurationStatus
+    ? mercadopagoService.getConfigurationStatus()
+    : { ok: false, missing: ['mercadopagoService'], backendBaseUrl: '' };
   const health = {
     status: 'OK',
     timestamp: new Date().toISOString(),
@@ -1968,8 +2011,13 @@ const sendHealth = (req, res) => {
       database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
       websocket: notificationSocket ? 'active' : 'inactive',
       email: emailService.transporter ? 'active' : 'inactive',
-      mercadopago: mercadopagoService.validateConfiguration(),
+      mercadopago: mpCfg.ok,
       geolocation: 'active'
+    },
+    payments: {
+      mercadopagoConfigured: mpCfg.ok,
+      missing: mpCfg.missing,
+      backendBaseUrl: mpCfg.backendBaseUrl,
     },
     uptime: process.uptime(),
     memory: process.memoryUsage(),

@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuthGuard from '../components/AuthGuard';
 import GoogleIcon from '../components/GoogleIcon';
 import { getBackendBaseUrl } from '../config/backend';
@@ -31,6 +32,11 @@ import {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
+  const modalActionPaddingBottom =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 24, 44)
+      : Math.max(insets.bottom + 12, 24);
   const { login, applyAuthResponse, isAuthenticated, isLoading } = useAuth();
   const googleAuth = useGoogleIdTokenLogin();
   const appleAuth = useAppleSignIn();
@@ -534,7 +540,7 @@ export default function LoginScreen() {
                   Revisá tu bandeja de entrada y seguí las instrucciones para restablecer tu contraseña.
                 </Text>
                 
-                <View style={styles.modalActions}>
+                <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
                   <TouchableOpacity
                     style={styles.secondaryButton}
                     onPress={() => {
@@ -573,7 +579,7 @@ export default function LoginScreen() {
                   No pudimos enviar el email de recuperación. Por favor, verifica tu email e intenta nuevamente.
                 </Text>
                 
-                <View style={styles.modalActions}>
+                <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
                   <TouchableOpacity
                     style={styles.secondaryButton}
                     onPress={handleResendEmail}

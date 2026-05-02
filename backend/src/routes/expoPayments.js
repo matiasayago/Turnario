@@ -5,6 +5,30 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+router.get('/health', authenticateToken, async (req, res) => {
+  try {
+    const mercadopagoService = req.mercadopagoService;
+    const dbReady = mongoose.connection.readyState === 1;
+    const cfg = mercadopagoService && typeof mercadopagoService.getConfigurationStatus === 'function'
+      ? mercadopagoService.getConfigurationStatus()
+      : { ok: false, missing: ['mercadopagoService'], backendBaseUrl: '' };
+
+    return res.json({
+      success: true,
+      data: {
+        provider: 'mercadopago',
+        dbReady,
+        configured: cfg.ok,
+        missing: cfg.missing,
+        backendBaseUrl: cfg.backendBaseUrl,
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/v1/expo-payments/health:', error);
+    return res.status(500).json({ success: false, message: 'Error' });
+  }
+});
+
 /**
  * Pagos de seña (Expo) — montado en /api/v1/expo-payments
  * (registrado pronto en server.js para evitar conflictos con otros routers)

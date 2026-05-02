@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export interface NotificationSettings {
   // Notificaciones generales
   generalNotifications: boolean;
+  messageNotifications: boolean;
+  reviewNotifications: boolean;
   
   // Notificaciones de citas
   appointmentRequests: boolean;
@@ -37,6 +39,8 @@ interface NotificationSettingsContextType {
 
 const defaultSettings: NotificationSettings = {
   generalNotifications: true,
+  messageNotifications: true,
+  reviewNotifications: true,
   appointmentRequests: true,
   appointmentConfirmations: true,
   appointmentReminders: true,
@@ -59,14 +63,10 @@ export const useNotificationSettings = () => {
     console.error('useNotificationSettings must be used within a NotificationSettingsProvider');
     // Retornar un objeto por defecto en lugar de lanzar un error
     return {
-      settings: {
-        pushNotifications: true,
-        emailNotifications: false,
-        appointmentReminders: true,
-        marketingNotifications: false,
-      },
-      updateSettings: () => console.warn('NotificationSettingsProvider not available'),
-      resetToDefaults: () => console.warn('NotificationSettingsProvider not available'),
+      settings: defaultSettings,
+      updateSettings: async () => console.warn('NotificationSettingsProvider not available'),
+      resetToDefaults: async () => console.warn('NotificationSettingsProvider not available'),
+      getSettingsForUser: async () => defaultSettings,
     };
   }
   return context;

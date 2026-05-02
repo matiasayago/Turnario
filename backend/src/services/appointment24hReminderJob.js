@@ -9,9 +9,15 @@ const { notifyClientByEmail } = require('./emailAppointmentNotify');
 /** Citas para las que tiene sentido recordar al cliente (turno “firme” o pendiente de pago de seña). */
 const REMINDER_STATUSES = ['confirmed', 'pending_payment'];
 
-/** Ventana ~24 h antes del inicio (margen ±1 h por el intervalo del job). */
-const WINDOW_MIN_MS = 23 * 60 * 60 * 1000;
-const WINDOW_MAX_MS = 25 * 60 * 60 * 1000;
+/**
+ * Ventana de envío:
+ * - Por defecto, cualquier turno dentro de las próximas 25h que aún no tenga recordatorio.
+ * - Esto evita perder recordatorios cuando el turno se crea con menos de 24h de anticipación.
+ */
+const WINDOW_MIN_HOURS = parseFloat(process.env.APPOINTMENT_REMINDER_WINDOW_MIN_HOURS || '0');
+const WINDOW_MAX_HOURS = parseFloat(process.env.APPOINTMENT_REMINDER_WINDOW_MAX_HOURS || '25');
+const WINDOW_MIN_MS = Math.max(0, WINDOW_MIN_HOURS) * 60 * 60 * 1000;
+const WINDOW_MAX_MS = Math.max(WINDOW_MIN_HOURS, WINDOW_MAX_HOURS) * 60 * 60 * 1000;
 
 const QUERY_LIMIT = parseInt(process.env.APPOINTMENT_REMINDER_QUERY_LIMIT || '800', 10);
 
@@ -76,7 +82,11 @@ async function runAppointment24hReminders(ctx) {
     const dateStr = String(apt.date || '').split('T')[0];
     const timeHead = String(apt.time || '').split(/\s+/)[0];
     const title = 'Recordatorio de cita';
-    const message = `Mañana tenés ${svc} con ${profName} (${dateStr} a las ${timeHead}).`;
+    const hoursToStart = Math.max(0, Math.round((startMs - now) / (60 * 60 * 1000)));
+    const isSameDay = String(dateStr) === new Date(now).toISOString().slice(0, 10);
+    const message = isSameDay
+      ? `Hoy tenés ${svc} con ${profName} (${dateStr} a las ${timeHead}).`
+      : `Tenés ${svc} con ${profName} (${dateStr} a las ${timeHead}) en aproximadamente ${hoursToStart} h.`;
 
     try {
       await ExpoNotification.create({
@@ -132,9 +142,9 @@ async function runAppointment24hReminders(ctx) {
     sent += 1;
   }
 
-  if (sent > 0) {
-    console.log(`📅 appointment24hReminderJob: ${sent} recordatorio(s) 24h enviados`);
-  }
+  console.log(
+    `📅 appointment24hReminderJob: enviados=${sent}, escaneados=${candidates.length}, ventana=${WINDOW_MIN_HOURS}-${WINDOW_MAX_HOURS}h`
+  );
   return { sent, scanned: candidates.length };
 }
 

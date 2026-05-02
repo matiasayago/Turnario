@@ -48,6 +48,23 @@ class MercadoPagoService {
     }
   }
 
+  getBackendPublicBaseUrl() {
+    const candidates = [
+      process.env.BACKEND_URL,
+      process.env.EXPO_PUBLIC_BACKEND_URL,
+      process.env.PUBLIC_BACKEND_URL,
+    ]
+      .map((v) => String(v || '').trim().replace(/\/$/, ''))
+      .filter(Boolean);
+
+    if (candidates.length > 0) return candidates[0];
+
+    const port = String(process.env.PORT || '3001').trim();
+    const hostRaw = String(process.env.HOST || 'localhost').trim();
+    const host = hostRaw === '0.0.0.0' ? 'localhost' : hostRaw;
+    return `http://${host}:${port}`;
+  }
+
   // Crear preferencia de pago
   async createPaymentPreference(paymentData) {
     this.assertReady();
@@ -91,7 +108,7 @@ class MercadoPagoService {
           email: appointment.client?.email || 'cliente@turnario.com',
         },
         external_reference: externalReference || appointmentId,
-        notification_url: `${process.env.BACKEND_URL}/api/payments/webhook`,
+        notification_url: `${this.getBackendPublicBaseUrl()}/api/payments/webhook`,
         back_urls: {
           success: `${process.env.FRONTEND_URL}/payment/success?appointment_id=${appointmentId}`,
           failure: `${process.env.FRONTEND_URL}/payment/failure?appointment_id=${appointmentId}`,
@@ -150,7 +167,7 @@ class MercadoPagoService {
         payment_method_id: paymentMethodId,
         payer: { email: payerEmail },
         external_reference: appointmentId,
-        notification_url: `${process.env.BACKEND_URL}/api/payments/webhook`,
+        notification_url: `${this.getBackendPublicBaseUrl()}/api/payments/webhook`,
       };
 
       const response = await this.payment.create({ body });
@@ -197,7 +214,7 @@ class MercadoPagoService {
           },
         },
         external_reference: appointmentId,
-        notification_url: `${process.env.BACKEND_URL}/api/payments/webhook`,
+        notification_url: `${this.getBackendPublicBaseUrl()}/api/payments/webhook`,
       };
 
       const response = await this.payment.create({ body });
@@ -426,16 +443,32 @@ class MercadoPagoService {
       console.warn('applyExpoMercadoPagoPayment: cita no encontrada', raw);
       return;
     }
-    doc.paymentStatus = paymentStatus;
-    if (mpPaymentId != null && mpPaymentId !== '') {
-      doc.mpPaymentId = String(mpPaymentId);
+    const previousPaymentStatus = String(doc.paymentStatus || '');
+    const previousPaymentId = String(doc.mpPaymentId || '');
+    const incomingPaymentId = mpPaymentId != null && mpPaymentId !== '' ? String(mpPaymentId) : '';
+    const incomingStatus = String(paymentStatus || '');
+
+    const alreadyProcessedSameEvent =
+      incomingPaymentId &&
+      previousPaymentId === incomingPaymentId &&
+      previousPaymentStatus === incomingStatus;
+    if (alreadyProcessedSameEvent) {
+      return;
+    }
+
+    doc.paymentStatus = incomingStatus;
+    if (incomingPaymentId) {
+      doc.mpPaymentId = incomingPaymentId;
     }
     if (paymentStatus === 'approved') {
       doc.status = 'confirmed';
     }
     await doc.save();
 
-    if (paymentStatus === 'approved' && doc.clientId) {
+    const alreadyNotifiedApproval =
+      previousPaymentStatus === 'approved' &&
+      (previousPaymentId === incomingPaymentId || (!previousPaymentId && !incomingPaymentId));
+    if (paymentStatus === 'approved' && doc.clientId && !alreadyNotifiedApproval) {
       try {
         const prof = await User.findById(doc.professionalId).select('fullName').lean();
         const name = prof?.fullName || 'Profesional';
@@ -481,10 +514,7 @@ class MercadoPagoService {
 
     const scheme = process.env.EXPO_APP_SCHEME || 'myapp';
     const ret = `${scheme}://payment-result`;
-    const backendBase = (process.env.BACKEND_URL || 'http://localhost:3000').replace(
-      /\/$/,
-      ''
-    );
+    const backendBase = this.getBackendPublicBaseUrl();
     const externalRef = `expo_${expoAppointmentId}`;
 
     const client = appointment.clientId;
@@ -661,6 +691,24 @@ class MercadoPagoService {
       return false;
     }
     return true;
+  }
+
+  getConfigurationStatus() {
+    const missing = [];
+    if (!String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()) {
+      missing.push('MERCADOPAGO_ACCESS_TOKEN');
+    }
+    if (!String(process.env.MERCADOPAGO_PUBLIC_KEY || '').trim()) {
+      missing.push('MERCADOPAGO_PUBLIC_KEY');
+    }
+    if (!String(this.getBackendPublicBaseUrl() || '').trim()) {
+      missing.push('BACKEND_PUBLIC_BASE_URL');
+    }
+    return {
+      ok: missing.length === 0 && !!this.preference && !!this.payment,
+      missing,
+      backendBaseUrl: this.getBackendPublicBaseUrl(),
+    };
   }
 }
 

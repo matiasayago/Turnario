@@ -22,7 +22,10 @@
       "env": {
         "EXPO_PUBLIC_APP_ENVIRONMENT": "preview",
         "EXPO_PUBLIC_BACKEND_URL": "http://192.168.0.11:3001",
-        "EXPO_PUBLIC_WEBSOCKET_URL": "ws://192.168.0.11:3001"
+        "EXPO_PUBLIC_WEBSOCKET_URL": "ws://192.168.0.11:3001",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "matiasayago@gmail.com",
+        "EXPO_PUBLIC_SUPPORT_PHONE": "+5491159572137",
+        "EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE": "5491159572137"
       }
     },
     "production": {
@@ -36,7 +39,10 @@
       "env": {
         "EXPO_PUBLIC_APP_ENVIRONMENT": "production",
         "EXPO_PUBLIC_BACKEND_URL": "https://api.tudominio.com",
-        "EXPO_PUBLIC_WEBSOCKET_URL": "wss://api.tudominio.com"
+        "EXPO_PUBLIC_WEBSOCKET_URL": "wss://api.tudominio.com",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "matiasayago@gmail.com",
+        "EXPO_PUBLIC_SUPPORT_PHONE": "+5491159572137",
+        "EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE": "5491159572137"
       }
     }
   },

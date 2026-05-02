@@ -15,6 +15,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AddPatientForm from '../../components/AddPatientForm';
 import { useAppointments, type Appointment } from '../../contexts/AppointmentContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -162,9 +163,19 @@ const DEFAULT_DEMO_PATIENTS: any[] = [
 ];
 
 export default function StatsScreen() {
+  const insets = useSafeAreaInsets();
+  const modalActionPaddingBottom =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 24, 44)
+      : Math.max(insets.bottom + 12, 24);
   const { user, hasProAccess } = useAuth();
   const { appointments, refreshAppointments } = useAppointments();
-  const { getConsultationsByPatient, getTreatmentsByPatient } = useMedicalHistory();
+  const {
+    getConsultationsByPatient,
+    getTreatmentsByPatient,
+    getDocumentsByPatient,
+    getPrescriptionsByPatient,
+  } = useMedicalHistory();
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
@@ -478,6 +489,10 @@ export default function StatsScreen() {
     appointments: [] as any[],
     treatments: [] as any[],
     medicalNotes: [] as any[],
+    consultations: [] as any[],
+    prescriptions: [] as any[],
+    documents: [] as any[],
+    progressTimeline: [] as any[],
   });
 
   // Funciones para la gestión de pacientes
@@ -518,7 +533,15 @@ export default function StatsScreen() {
     (patient: any) => {
       const proId = String(user?._id || user?.id || '').trim();
       if (!proId || !patient) {
-        return { appointments: [], treatments: [], medicalNotes: [] };
+        return {
+          appointments: [],
+          treatments: [],
+          medicalNotes: [],
+          consultations: [],
+          prescriptions: [],
+          documents: [],
+          progressTimeline: [],
+        };
       }
       const norm = (s: string) =>
         String(s || '')
@@ -533,6 +556,7 @@ export default function StatsScreen() {
       const pClientId = String(
         patient.clientId || patient.userId || patient.patientClientId || ''
       ).trim();
+      const selectedPatientId = String(patient.id || '').trim();
 
       const mine = (appointments || []).filter(
         (a) => String(a.professionalId || '').trim() === proId
@@ -553,6 +577,43 @@ export default function StatsScreen() {
         }
         return false;
       });
+      const relatedClientIds = Array.from(
+        new Set(
+          forPatient
+            .map((a) => String(a.clientId || '').trim())
+            .filter((id) => id.length > 0)
+        )
+      );
+      const candidatePatientIds = Array.from(
+        new Set([selectedPatientId, pClientId, ...relatedClientIds].filter((id) => id.length > 0))
+      );
+
+      const collectFromPatientIds = <T extends { id?: string }>(
+        getter: (patientId: string) => T[]
+      ): T[] => {
+        const out: T[] = [];
+        const seen = new Set<string>();
+        for (const pid of candidatePatientIds) {
+          const rows = getter(pid) || [];
+          for (const row of rows) {
+            const key = String(row?.id || `${pid}-${out.length}`);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push(row);
+          }
+        }
+        return out;
+      };
+
+      const formatDate = (value: unknown, fallback = '—'): string => {
+        if (value instanceof Date && !isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+        const s = String(value || '').trim();
+        if (!s) return fallback;
+        const d = new Date(s);
+        if (isNaN(d.getTime())) return s;
+        return d.toISOString().slice(0, 10);
+      };
+
       const sorted = [...forPatient].sort(
         (x, y) =>
           String(y.date).localeCompare(String(x.date)) ||
@@ -592,56 +653,114 @@ export default function StatsScreen() {
         });
       }
 
-      const historyPid = String(patient.id || '').trim();
-      let treatmentsOut: any[] = [];
-      if (historyPid) {
-        const mhConsultations = getConsultationsByPatient(historyPid);
-        const mhTreatments = getTreatmentsByPatient(historyPid);
-        for (const c of mhConsultations) {
-          const d = c.date instanceof Date ? c.date : new Date(c.date as unknown as string);
-          const dateStr = isNaN(d.getTime())
-            ? patient.lastVisit || new Date().toISOString().slice(0, 10)
-            : d.toISOString().slice(0, 10);
-          const treatLine =
-            c.treatment && String(c.treatment).trim() && c.treatment !== '—'
-              ? `Tratamiento: ${c.treatment}`
-              : '';
-          notesOut.push({
-            id: `mh-${c.id}`,
-            date: dateStr,
-            type: 'Sesión registrada',
-            content: [c.notes, treatLine].filter(Boolean).join('\n\n'),
-            professional: c.professionalName,
-          });
-        }
-        treatmentsOut = mhTreatments.map((t) => ({
-          id: t.id,
-          name: t.name,
-          description: t.description,
-          status: t.status,
-          progress: t.progress,
-          completedSessions: t.milestones.filter((m) => m.status === 'completed').length,
-          sessions: Math.max(1, t.milestones.length),
-          startDate:
-            t.startDate instanceof Date
-              ? t.startDate.toISOString().slice(0, 10)
-              : String(t.startDate),
-          endDate: t.endDate
-            ? t.endDate instanceof Date
-              ? t.endDate.toISOString().slice(0, 10)
-              : String(t.endDate)
-            : '—',
-          goals: t.milestones.map((m) => m.title),
-        }));
+      const mhConsultations = collectFromPatientIds(getConsultationsByPatient)
+        .sort((a: any, b: any) => formatDate(b.date).localeCompare(formatDate(a.date)));
+      const mhTreatments = collectFromPatientIds(getTreatmentsByPatient);
+      const mhPrescriptions = collectFromPatientIds(getPrescriptionsByPatient);
+      const mhDocuments = collectFromPatientIds(getDocumentsByPatient);
+
+      for (const c of mhConsultations) {
+        const dateStr = formatDate((c as any).date, patient.lastVisit || new Date().toISOString().slice(0, 10));
+        const treatLine =
+          (c as any).treatment && String((c as any).treatment).trim() && (c as any).treatment !== '—'
+            ? `Tratamiento: ${(c as any).treatment}`
+            : '';
+        notesOut.push({
+          id: `mh-${(c as any).id}`,
+          date: dateStr,
+          type: 'Sesión registrada',
+          content: [(c as any).notes, treatLine].filter(Boolean).join('\n\n'),
+          professional: (c as any).professionalName || user?.fullName || 'Profesional',
+        });
       }
+
+      const treatmentsOut = mhTreatments.map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        status: t.status,
+        progress: Number(t.progress || 0),
+        completedSessions: Array.isArray(t.milestones)
+          ? t.milestones.filter((m: any) => m.status === 'completed').length
+          : 0,
+        sessions: Math.max(1, Array.isArray(t.milestones) ? t.milestones.length : 1),
+        startDate: formatDate(t.startDate),
+        endDate: t.endDate ? formatDate(t.endDate) : '—',
+        goals: Array.isArray(t.milestones) ? t.milestones.map((m: any) => m.title).filter(Boolean) : [],
+      }));
+
+      const consultationsOut = mhConsultations.map((c: any) => ({
+        id: c.id,
+        date: formatDate(c.date),
+        type: c.type || 'follow_up',
+        diagnosis: c.diagnosis || 'Sin diagnóstico registrado',
+        symptoms: c.symptoms || 'Sin síntomas registrados',
+        treatment: c.treatment || 'Sin tratamiento especificado',
+        notes: c.notes || '',
+        professionalName: c.professionalName || user?.fullName || 'Profesional',
+      }));
+
+      const prescriptionsOut = mhPrescriptions.map((p: any) => ({
+        id: p.id,
+        date: formatDate(p.date),
+        status: p.status || 'active',
+        instructions: p.instructions || '',
+        medications: Array.isArray(p.medications)
+          ? p.medications.map((m: any) => `${m.name || 'Medicamento'} ${m.dosage ? `(${m.dosage})` : ''}`.trim())
+          : [],
+      }));
+
+      const documentsOut = mhDocuments.map((d: any) => ({
+        id: d.id,
+        date: formatDate(d.uploadDate || d.createdAt),
+        type: d.type || 'document',
+        title: d.title || d.fileName || 'Documento',
+        description: d.description || '',
+      }));
+
+      const progressTimeline = [
+        ...mhTreatments.flatMap((t: any) =>
+          (Array.isArray(t.milestones) ? t.milestones : []).map((m: any) => ({
+            id: `milestone-${t.id}-${m.id || m.title}`,
+            date: formatDate(m.completedDate || m.targetDate, '—'),
+            title: m.title || 'Hito de tratamiento',
+            details: m.description || '',
+            status: m.status || 'pending',
+            source: t.name || 'Tratamiento',
+          }))
+        ),
+        ...mhTreatments.flatMap((t: any, idx: number) =>
+          (Array.isArray(t.notes) ? t.notes : []).map((note: string, noteIdx: number) => ({
+            id: `treat-note-${t.id || idx}-${noteIdx}`,
+            date: formatDate(t.updatedAt || t.startDate, '—'),
+            title: 'Nota de evolución',
+            details: note,
+            status: 'completed',
+            source: t.name || 'Tratamiento',
+          }))
+        ),
+      ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
       return {
         appointments: apptRows,
         treatments: treatmentsOut,
         medicalNotes: notesOut,
+        consultations: consultationsOut,
+        prescriptions: prescriptionsOut,
+        documents: documentsOut,
+        progressTimeline,
       };
     },
-    [appointments, user?._id, user?.id, user?.fullName, getConsultationsByPatient, getTreatmentsByPatient]
+    [
+      appointments,
+      user?._id,
+      user?.id,
+      user?.fullName,
+      getConsultationsByPatient,
+      getTreatmentsByPatient,
+      getPrescriptionsByPatient,
+      getDocumentsByPatient,
+    ]
   );
 
   const handleScheduleAppointment = (patient: any) => {
@@ -1306,7 +1425,7 @@ export default function StatsScreen() {
           />
 
           {/* Botones de Acción */}
-          <View style={styles.formActions}>
+          <View style={[styles.formActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={handleCancelAddPatient}
@@ -1363,7 +1482,7 @@ export default function StatsScreen() {
           />
 
           {/* Botones de Acción */}
-          <View style={styles.formActions}>
+          <View style={[styles.formActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={handleCancelEditPatient}
@@ -1900,6 +2019,88 @@ export default function StatsScreen() {
                       <Text key={index} style={styles.treatmentGoalText}>• {goal}</Text>
                     ))}
                   </View>
+                </View>
+              ))}
+            </View>
+
+            {/* Secciones anteriores */}
+            <View style={styles.historySection}>
+              <Text style={styles.historySectionTitle}>📋 Secciones Anteriores</Text>
+              {patientHistoryData.consultations.length === 0 &&
+              patientHistoryData.prescriptions.length === 0 &&
+              patientHistoryData.documents.length === 0 ? (
+                <Text style={styles.historyEmptyText}>
+                  Sin secciones clínicas previas registradas para este paciente.
+                </Text>
+              ) : null}
+
+              {patientHistoryData.consultations.map((consultation) => (
+                <View key={`consult-${consultation.id}`} style={styles.noteCard}>
+                  <View style={styles.noteHeader}>
+                    <Text style={styles.noteType}>Consulta {consultation.type}</Text>
+                    <Text style={styles.noteDate}>{consultation.date}</Text>
+                  </View>
+                  <Text style={styles.noteContent}>Diagnóstico: {consultation.diagnosis}</Text>
+                  <Text style={styles.noteContent}>Síntomas: {consultation.symptoms}</Text>
+                  <Text style={styles.noteContent}>Tratamiento: {consultation.treatment}</Text>
+                  {consultation.notes ? (
+                    <Text style={styles.noteContent}>Notas: {consultation.notes}</Text>
+                  ) : null}
+                </View>
+              ))}
+
+              {patientHistoryData.prescriptions.map((prescription) => (
+                <View key={`pres-${prescription.id}`} style={styles.noteCard}>
+                  <View style={styles.noteHeader}>
+                    <Text style={styles.noteType}>Prescripción</Text>
+                    <Text style={styles.noteDate}>{prescription.date}</Text>
+                  </View>
+                  <Text style={styles.noteContent}>
+                    Estado: {prescription.status === 'active' ? 'Activa' : 'Inactiva'}
+                  </Text>
+                  {prescription.medications.length > 0 ? (
+                    <Text style={styles.noteContent}>
+                      Medicación: {prescription.medications.join(', ')}
+                    </Text>
+                  ) : null}
+                  {prescription.instructions ? (
+                    <Text style={styles.noteContent}>Indicaciones: {prescription.instructions}</Text>
+                  ) : null}
+                </View>
+              ))}
+
+              {patientHistoryData.documents.map((document) => (
+                <View key={`doc-${document.id}`} style={styles.noteCard}>
+                  <View style={styles.noteHeader}>
+                    <Text style={styles.noteType}>Documento: {document.type}</Text>
+                    <Text style={styles.noteDate}>{document.date}</Text>
+                  </View>
+                  <Text style={styles.noteContent}>{document.title}</Text>
+                  {document.description ? (
+                    <Text style={styles.noteContent}>{document.description}</Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+
+            {/* Progreso */}
+            <View style={styles.historySection}>
+              <Text style={styles.historySectionTitle}>📈 Progreso del Paciente</Text>
+              {patientHistoryData.progressTimeline.length === 0 ? (
+                <Text style={styles.historyEmptyText}>
+                  Todavía no hay hitos o notas de evolución registradas.
+                </Text>
+              ) : null}
+              {patientHistoryData.progressTimeline.map((item) => (
+                <View key={item.id} style={styles.noteCard}>
+                  <View style={styles.noteHeader}>
+                    <Text style={styles.noteType}>{item.title}</Text>
+                    <Text style={styles.noteDate}>{item.date}</Text>
+                  </View>
+                  <Text style={styles.noteContent}>{item.details || 'Sin detalle adicional.'}</Text>
+                  <Text style={styles.noteProfessional}>
+                    {item.source} • {item.status === 'completed' ? 'Completado' : 'Pendiente'}
+                  </Text>
                 </View>
               ))}
             </View>

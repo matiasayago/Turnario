@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ConditionalScreen from '../../components/ConditionalScreen';
 import CustomCalendar from '../../components/CustomCalendar';
@@ -57,6 +58,11 @@ function resolveProfessionalMongoId(
 }
 
 export default function CalendarScreen() {
+  const insets = useSafeAreaInsets();
+  const modalActionPaddingBottom =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 24, 44)
+      : Math.max(insets.bottom + 12, 24);
   const params = useLocalSearchParams<{ manageSchedule?: string | string[] }>();
   const { user } = useAuth();
   const [forceOpenFromSettings, setForceOpenFromSettings] = useState(false);
@@ -2362,7 +2368,7 @@ export default function CalendarScreen() {
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowMercadoPagoModal(false)}

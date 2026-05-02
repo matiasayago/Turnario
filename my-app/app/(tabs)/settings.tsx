@@ -11,10 +11,13 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Linking,
+  Share,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useNotificationSettings } from '../../contexts/NotificationSettingsContext';
@@ -31,8 +34,18 @@ import { useUsers, useServices } from '../../hooks';
 import { MedicalAuthorizationModal } from '../../components/MedicalAuthorizationModal';
 import { useAvailability } from '../../contexts/AvailabilityContext';
 import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingSlotsService';
+import simpleAuthService from '../../services/simpleAuthService';
 
 function SettingsScreen() {
+  const insets = useSafeAreaInsets();
+  const modalActionPaddingBottom =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 24, 44)
+      : Math.max(insets.bottom + 12, 24);
+  const scrollContentBottomPadding =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 140, 170)
+      : Math.max(insets.bottom + 120, 140);
   const { user, logout, updateUserProfile } = useAuth();
   const { shouldOpenNewAppointmentModal, closeNewAppointmentModal } = useNewAppointment();
   const { shouldOpenReservaConSenaModal, appointmentData, closeReservaConSenaModal } = useReservaConSena();
@@ -236,6 +249,14 @@ function SettingsScreen() {
   }[]>([]);
   const [showClientServiceSelector, setShowClientServiceSelector] = useState(false);
   const [showProfessionalSelector, setShowProfessionalSelector] = useState(false);
+  const [showHelpSupportModal, setShowHelpSupportModal] = useState(false);
+  const supportEmail = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'matiasayago@gmail.com').trim();
+  const supportPhone = (process.env.EXPO_PUBLIC_SUPPORT_PHONE || '+5491159572137').trim();
+  const supportWhatsAppPhone = (
+    process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE || '5491159572137'
+  )
+    .trim()
+    .replace(/[^\d]/g, '');
   
   // Estados para el calendario del cliente
   const [showClientDatePickerModal, setShowClientDatePickerModal] = useState(false);
@@ -409,6 +430,60 @@ function SettingsScreen() {
   // Estados para el modal de configuración de notificaciones
   const [showNotificationSettingsModal, setShowNotificationSettingsModal] = useState(false);
   const { settings, updateSettings, resetToDefaults } = useNotificationSettings();
+  const notificationsUiState = {
+    appointments:
+      settings.appointmentRequests ||
+      settings.appointmentConfirmations ||
+      settings.appointmentReminders ||
+      settings.appointmentCancellations ||
+      settings.reminderNotifications,
+    messages: settings.messageNotifications,
+    reviews: settings.reviewNotifications,
+    promotions: settings.marketingNotifications,
+    sound: settings.soundEnabled,
+    vibration: settings.vibrationEnabled,
+  };
+  const toggleNotificationType = async (
+    key: 'appointments' | 'messages' | 'reviews' | 'promotions' | 'sound' | 'vibration'
+  ) => {
+    const value = !notificationsUiState[key];
+    switch (key) {
+      case 'appointments':
+        await updateSettings({
+          appointmentRequests: value,
+          appointmentConfirmations: value,
+          appointmentReminders: value,
+          appointmentCancellations: value,
+          reminderNotifications: value,
+          generalNotifications: value || notificationsUiState.messages || notificationsUiState.reviews,
+        });
+        break;
+      case 'messages':
+        await updateSettings({
+          messageNotifications: value,
+          generalNotifications: value || notificationsUiState.appointments || notificationsUiState.reviews,
+        });
+        break;
+      case 'reviews':
+        await updateSettings({
+          reviewNotifications: value,
+          generalNotifications: value || notificationsUiState.appointments || notificationsUiState.messages,
+        });
+        break;
+      case 'promotions':
+        await updateSettings({ marketingNotifications: value });
+        break;
+      case 'sound':
+        await updateSettings({ soundEnabled: value });
+        break;
+      case 'vibration':
+        await updateSettings({ vibrationEnabled: value });
+        break;
+      default:
+        break;
+    }
+  };
+
   
   // Estados para el modal de Mis Citas
   const [showMyAppointmentsModal, setShowMyAppointmentsModal] = useState(false);
@@ -704,7 +779,7 @@ function SettingsScreen() {
   };
   
   // Contexto de citas
-  const { getUpcomingAppointments, addAppointment, updateAppointmentStatus } = useAppointments();
+  const { getUpcomingAppointments, addAppointment, updateAppointmentStatus, refreshAppointments } = useAppointments();
   
   // Contexto de reseñas
   // const { addReview, deleteReview } = useReviews();
@@ -876,7 +951,10 @@ function SettingsScreen() {
   };
 
   // Función para guardar los cambios del paciente
-  const handleSavePatientChanges = () => {
+  const isMongoObjectId = (value: unknown) =>
+    typeof value === 'string' && /^[a-fA-F0-9]{24}$/.test(value.trim());
+
+  const handleSavePatientChanges = async () => {
     console.log('💎 Guardando cambios del paciente...');
     console.log('📝 Datos a guardar:', editingPatientData);
     
@@ -908,22 +986,66 @@ function SettingsScreen() {
     
     console.log('🔄 Paciente actualizado:', updatedPatient);
     
-    // Actualizar el paciente seleccionado para detalles
-    setSelectedPatientForDetails(updatedPatient);
-    
-    // Cerrar ambos modales
+    try {
+      const patientId = String(updatedPatient.id || '').trim();
+      if (isMongoObjectId(patientId)) {
+        const token = await simpleAuthService.getToken();
+        if (!token) {
+          throw new Error('No hay sesión activa para actualizar el paciente.');
+        }
+
+        const response = await fetch(`${getBackendBaseUrl()}/api/users/${patientId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            fullName: editingPatientData.fullName,
+            email: editingPatientData.email,
+            phone: String(editingPatientData.phone || '').replace(/[^\d+]/g, ''),
+            notes: editingPatientData.notes,
+          }),
+        });
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || !json?.success) {
+          const msg =
+            json?.message ||
+            json?.error ||
+            `No se pudo actualizar el paciente (HTTP ${response.status}).`;
+          throw new Error(msg);
+        }
+
+        await refreshUsers();
+        await refreshAppointments();
+      }
+
+      // Actualizar el paciente seleccionado para detalles
+      setSelectedPatientForDetails(updatedPatient);
+
+      // Cerrar ambos modales
+      setShowEditPatientModal(false);
+      setShowPatientDetailsModal(false);
+
+      Alert.alert(
+        '✅ Paciente Actualizado',
+        `La información de ${editingPatientData.fullName} se ha guardado correctamente.`,
+        [{ text: 'OK' }]
+      );
+      console.log('✅ Paciente guardado exitosamente:', updatedPatient);
+    } catch (error: any) {
+      console.error('❌ Error guardando paciente:', error);
+      Alert.alert(
+        'Error',
+        error?.message || 'No se pudo guardar en backend. Se mantuvieron solo cambios locales.'
+      );
+    }
+  };
+
+  // Función para cancelar edición de paciente (botón físico y cerrar)
+  const handleCancelEditPatient = () => {
     setShowEditPatientModal(false);
-    setShowPatientDetailsModal(false);
-    
-    // Mostrar mensaje de éxito con detalles
-    Alert.alert(
-      '✅ Paciente Actualizado',
-      `La información de ${editingPatientData.fullName} se ha guardado correctamente.\n\nCambios realizados:\n• Nombre: ${editingPatientData.fullName}\n• Email: ${editingPatientData.email}\n• Teléfono: ${editingPatientData.phone}\n• Fecha de nacimiento: ${editingPatientData.dateOfBirth}\n• Género: ${editingPatientData.gender}\n• Dirección: ${editingPatientData.address}\n• Contacto de emergencia: ${editingPatientData.emergencyContact}\n• Historial médico: ${editingPatientData.medicalHistory}\n• Alergias: ${editingPatientData.allergies}\n• Notas: ${editingPatientData.notes}`,
-      [{ text: 'OK' }]
-    );
-    
-    // Log adicional para confirmar que se guardó
-    console.log('✅ Paciente guardado exitosamente:', updatedPatient);
   };
 
   // Función para cancelar la edición del perfil
@@ -2550,6 +2672,34 @@ function SettingsScreen() {
   };
 
   const handleViewPatientHistory = (patient: any) => {
+    const currentUserId = String(user?._id || user?.id || '');
+    const patientAppointments = getUpcomingAppointments(currentUserId).filter((appointment) => {
+      const byEmail =
+        patient.email &&
+        appointment.patientEmail &&
+        String(appointment.patientEmail).toLowerCase() === String(patient.email).toLowerCase();
+      const byName =
+        patient.name &&
+        appointment.patientName &&
+        String(appointment.patientName).toLowerCase() === String(patient.name).toLowerCase();
+      const byId =
+        patient.id &&
+        appointment.clientId &&
+        String(appointment.clientId) === String(patient.id);
+      return Boolean(byEmail || byName || byId);
+    });
+
+    const historyLines =
+      patientAppointments.length > 0
+        ? patientAppointments
+            .slice(0, 8)
+            .map(
+              (apt) =>
+                `• ${apt.date} ${apt.time} - ${apt.service} (${apt.status === 'confirmed' ? 'Confirmada' : apt.status})`
+            )
+            .join('\n')
+        : '• No hay citas registradas aún para este paciente.';
+
     Alert.alert(
       '📋 Historial del Paciente',
       `Historial de ${patient.name}:\n\n` +
@@ -2557,25 +2707,167 @@ function SettingsScreen() {
       `• Última visita: ${patient.lastVisit}\n` +
       `• Estado: ${patient.status === 'active' ? 'Activo' : 'Inactivo'}\n` +
       `• Notas: ${patient.notes}\n\n` +
-      `Función en desarrollo - Próximamente se mostrará el historial completo de citas, tratamientos y notas médicas.`,
+      `Últimas citas:\n${historyLines}`,
       [{ text: 'OK' }]
     );
   };
 
-  const handleImportPatients = () => {
-    Alert.alert(
-      '📥 Importar Pacientes',
-      'Función en desarrollo - Próximamente podrás importar pacientes desde archivos CSV o Excel.',
-      [{ text: 'OK' }]
-    );
+  const normalizePatientDate = (value?: string) => {
+    if (!value) return null;
+    if (value.includes('/')) {
+      const [day, month, year] = value.split('/');
+      if (!day || !month || !year) return null;
+      const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const handleExportPatients = () => {
-    Alert.alert(
-      '📤 Exportar Pacientes',
-      'Función en desarrollo - Próximamente podrás exportar tu lista de pacientes a archivos CSV o Excel.',
-      [{ text: 'OK' }]
-    );
+  const getRealPatientManagementList = () => {
+    const currentUserId = String(user?._id || user?.id || '');
+    const sourceAppointments = currentUserId ? getUpcomingAppointments(currentUserId) : [];
+    const patientMap = new Map<string, any>();
+
+    clients.forEach((client) => {
+      const key = String(client._id || client.email || client.fullName || Math.random());
+      patientMap.set(key, {
+        id: String(client._id || key),
+        name: client.fullName || 'Paciente',
+        email: client.email || '',
+        phone: client.phone || 'No especificado',
+        status: client.isActive ? 'active' : 'inactive',
+        lastVisit: '',
+        visits: 0,
+        notes: 'Paciente registrado en el sistema',
+        dateOfBirth: '',
+        gender: '',
+        address: '',
+        emergencyContact: '',
+        medicalHistory: '',
+        allergies: '',
+      });
+    });
+
+    sourceAppointments.forEach((appointment) => {
+      const rawKey =
+        appointment.clientId ||
+        (appointment.patientEmail ? String(appointment.patientEmail).toLowerCase() : '') ||
+        (appointment.patientName ? String(appointment.patientName).toLowerCase() : '');
+      const key = String(rawKey || `appointment_${appointment.id}`);
+      const existing = patientMap.get(key) || {
+        id: String(appointment.clientId || key),
+        name: appointment.patientName || appointment.clientName || 'Paciente',
+        email: appointment.patientEmail || '',
+        phone: appointment.patientPhone || 'No especificado',
+        status: 'active',
+        lastVisit: '',
+        visits: 0,
+        notes: '',
+        dateOfBirth: '',
+        gender: '',
+        address: '',
+        emergencyContact: '',
+        medicalHistory: '',
+        allergies: '',
+      };
+
+      const appointmentDate = normalizePatientDate(String(appointment.date || ''));
+      const currentLastVisitDate = normalizePatientDate(existing.lastVisit);
+      const shouldReplaceLastVisit =
+        appointmentDate &&
+        (!currentLastVisitDate || appointmentDate.getTime() > currentLastVisitDate.getTime());
+
+      patientMap.set(key, {
+        ...existing,
+        id: String(existing.id || appointment.clientId || key),
+        name: existing.name || appointment.patientName || appointment.clientName || 'Paciente',
+        email: existing.email || appointment.patientEmail || '',
+        phone: existing.phone !== 'No especificado' ? existing.phone : appointment.patientPhone || 'No especificado',
+        status: appointment.status === 'cancelled' ? existing.status : 'active',
+        visits: Number(existing.visits || 0) + 1,
+        lastVisit: shouldReplaceLastVisit ? String(appointment.date || '') : existing.lastVisit,
+        notes:
+          existing.notes && existing.notes !== 'Paciente registrado en el sistema'
+            ? existing.notes
+            : appointment.notes || 'Paciente con historial de citas registradas',
+      });
+    });
+
+    let rows = Array.from(patientMap.values());
+
+    if (patientManagementSearchQuery.trim()) {
+      const query = patientManagementSearchQuery.toLowerCase();
+      rows = rows.filter(
+        (row) =>
+          String(row.name || '').toLowerCase().includes(query) ||
+          String(row.email || '').toLowerCase().includes(query) ||
+          String(row.phone || '').includes(query)
+      );
+    }
+
+    if (patientManagementFilter === 'active') {
+      rows = rows.filter((row) => row.status === 'active');
+    } else if (patientManagementFilter === 'inactive') {
+      rows = rows.filter((row) => row.status === 'inactive');
+    } else if (patientManagementFilter === 'recent') {
+      const threshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      rows = rows.filter((row) => {
+        const parsed = normalizePatientDate(row.lastVisit);
+        return parsed ? parsed.getTime() >= threshold.getTime() : false;
+      });
+    }
+
+    rows.sort((a, b) => Number(b.visits || 0) - Number(a.visits || 0));
+    return rows;
+  };
+
+  const handleImportPatients = async () => {
+    try {
+      await refreshUsers();
+      Alert.alert('✅ Pacientes actualizados', 'Se sincronizó la lista de pacientes desde el backend.');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo sincronizar la lista de pacientes.');
+    }
+  };
+
+  const handleExportPatients = async () => {
+    const rows = getRealPatientManagementList();
+    if (!rows.length) {
+      Alert.alert('📤 Exportar Pacientes', 'No hay pacientes para exportar.');
+      return;
+    }
+
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? '').replace(/"/g, '""');
+      return `"${text}"`;
+    };
+    const header = ['Nombre', 'Email', 'Telefono', 'Estado', 'Ultima visita', 'Visitas', 'Notas'];
+    const csvLines = [
+      header.join(','),
+      ...rows.map((row) =>
+        [
+          escapeCsv(row.name),
+          escapeCsv(row.email),
+          escapeCsv(row.phone),
+          escapeCsv(row.status === 'active' ? 'Activo' : 'Inactivo'),
+          escapeCsv(row.lastVisit || ''),
+          escapeCsv(row.visits || 0),
+          escapeCsv(row.notes || ''),
+        ].join(',')
+      ),
+    ];
+    const csvContent = csvLines.join('\n');
+
+    try {
+      await Share.share({
+        title: 'Pacientes Turnario',
+        message: `Pacientes Turnario (CSV)\n\n${csvContent}`,
+      });
+    } catch (error) {
+      console.error('❌ Error exportando pacientes:', error);
+      Alert.alert('Error', 'No se pudo exportar el listado de pacientes.');
+    }
   };
 
   const getFilteredPatients = () => {
@@ -2615,8 +2907,59 @@ function SettingsScreen() {
     return patients;
   };
 
+  const openExternalLink = async (url: string, errorMessage: string) => {
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('No disponible', errorMessage);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      console.warn('No se pudo abrir enlace externo:', error);
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
   const handleHelp = () => {
-    Alert.alert('Ayuda', 'Función en desarrollo');
+    setShowHelpSupportModal(true);
+  };
+
+  const handleSupportByEmail = () => {
+    const subject = encodeURIComponent('Soporte Turnario');
+    const body = encodeURIComponent('Hola equipo de Turnario, necesito ayuda con...');
+    void openExternalLink(
+      `mailto:${supportEmail}?subject=${subject}&body=${body}`,
+      'No se pudo abrir el cliente de correo en este dispositivo.'
+    );
+  };
+
+  const handleSupportByWhatsApp = () => {
+    if (!supportWhatsAppPhone) {
+      Alert.alert('No disponible', 'WhatsApp de soporte no configurado.');
+      return;
+    }
+    const text = encodeURIComponent('Hola Turnario, necesito ayuda con la app.');
+    void openExternalLink(
+      `https://wa.me/${supportWhatsAppPhone}?text=${text}`,
+      'No se pudo abrir WhatsApp en este dispositivo.'
+    );
+  };
+
+  const handleSupportByPhone = () => {
+    if (!supportPhone) {
+      Alert.alert('No disponible', 'Teléfono de soporte no configurado.');
+      return;
+    }
+    void openExternalLink(`tel:${supportPhone}`, 'No se pudo iniciar la llamada desde este dispositivo.');
+  };
+
+  const handleHelpFaq = () => {
+    Alert.alert(
+      'Preguntas frecuentes',
+      '• Si no ves profesionales, revisá conexión y servicio seleccionado.\n• Si no llegan notificaciones, verificá permisos en la app.\n• Si una cita no aparece, cerrá y abrí sesión nuevamente.\n• Para soporte técnico, escribinos por email o WhatsApp.',
+      [{ text: 'Entendido' }]
+    );
   };
 
   const handleAbout = () => {
@@ -3898,7 +4241,7 @@ function SettingsScreen() {
             </View>
           </ScrollView>
 
-          <View style={styles.modalActions}>
+          <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={handleCancelEdit}
@@ -3946,46 +4289,46 @@ function SettingsScreen() {
                 <Text style={styles.formLabel}>Tipos de Notificaciones</Text>
                 <TouchableOpacity
                   style={styles.switchOption}
-                  onPress={() => updateSettings('appointments', !settings.appointments)}
+                  onPress={() => void toggleNotificationType('appointments')}
                 >
                   <Text style={styles.switchText}>Citas y Recordatorios</Text>
                   <Ionicons
-                    name={settings.appointments ? "toggle" : "toggle-outline"}
+                    name={notificationsUiState.appointments ? "toggle" : "toggle-outline"}
                     size={24}
-                    color={settings.appointments ? "#4CAF50" : "#ccc"}
+                    color={notificationsUiState.appointments ? "#4CAF50" : "#ccc"}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.switchOption}
-                  onPress={() => updateSettings('messages', !settings.messages)}
+                  onPress={() => void toggleNotificationType('messages')}
                 >
                   <Text style={styles.switchText}>Mensajes</Text>
                   <Ionicons
-                    name={settings.messages ? "toggle" : "toggle-outline"}
+                    name={notificationsUiState.messages ? "toggle" : "toggle-outline"}
                     size={24}
-                    color={settings.messages ? "#4CAF50" : "#ccc"}
+                    color={notificationsUiState.messages ? "#4CAF50" : "#ccc"}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.switchOption}
-                  onPress={() => updateSettings('reviews', !settings.reviews)}
+                  onPress={() => void toggleNotificationType('reviews')}
                 >
                   <Text style={styles.switchText}>Reseñas y Calificaciones</Text>
                   <Ionicons
-                    name={settings.reviews ? "toggle" : "toggle-outline"}
+                    name={notificationsUiState.reviews ? "toggle" : "toggle-outline"}
                     size={24}
-                    color={settings.reviews ? "#4CAF50" : "#ccc"}
+                    color={notificationsUiState.reviews ? "#4CAF50" : "#ccc"}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.switchOption}
-                  onPress={() => updateSettings('promotions', !settings.promotions)}
+                  onPress={() => void toggleNotificationType('promotions')}
                 >
                   <Text style={styles.switchText}>Promociones y Ofertas</Text>
                   <Ionicons
-                    name={settings.promotions ? "toggle" : "toggle-outline"}
+                    name={notificationsUiState.promotions ? "toggle" : "toggle-outline"}
                     size={24}
-                    color={settings.promotions ? "#4CAF50" : "#ccc"}
+                    color={notificationsUiState.promotions ? "#4CAF50" : "#ccc"}
                   />
                 </TouchableOpacity>
               </View>
@@ -3994,44 +4337,51 @@ function SettingsScreen() {
                 <Text style={styles.formLabel}>Configuración de Sonido</Text>
                 <TouchableOpacity
                   style={styles.switchOption}
-                  onPress={() => updateSettings('sound', !settings.sound)}
+                  onPress={() => void toggleNotificationType('sound')}
                 >
                   <Text style={styles.switchText}>Sonido de Notificaciones</Text>
                   <Ionicons
-                    name={settings.sound ? "toggle" : "toggle-outline"}
+                    name={notificationsUiState.sound ? "toggle" : "toggle-outline"}
                     size={24}
-                    color={settings.sound ? "#4CAF50" : "#ccc"}
+                    color={notificationsUiState.sound ? "#4CAF50" : "#ccc"}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.switchOption}
-                  onPress={() => updateSettings('vibration', !settings.vibration)}
+                  onPress={() => void toggleNotificationType('vibration')}
                 >
                   <Text style={styles.switchText}>Vibración</Text>
                   <Ionicons
-                    name={settings.vibration ? "toggle" : "toggle-outline"}
+                    name={notificationsUiState.vibration ? "toggle" : "toggle-outline"}
                     size={24}
-                    color={settings.vibration ? "#4CAF50" : "#ccc"}
+                    color={notificationsUiState.vibration ? "#4CAF50" : "#ccc"}
                   />
                 </TouchableOpacity>
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View
+              style={[
+                styles.privacyModalActions,
+                { paddingBottom: modalActionPaddingBottom },
+              ]}
+            >
+              <View style={styles.privacyPrimaryActions}>
+                <TouchableOpacity
+                  style={[styles.privacyActionButton, styles.cancelButton]}
+                  onPress={() => setShowNotificationSettingsModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.privacyActionButton, styles.saveButton]}
+                  onPress={handleSaveNotificationSettings}
+                >
+                  <Text style={styles.saveButtonText}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowNotificationSettingsModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleSaveNotificationSettings}
-              >
-                <Text style={styles.saveButtonText}>Guardar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.resetButton]}
+                style={[styles.privacyResetButton, styles.resetButton]}
                 onPress={handleResetNotificationSettings}
               >
                 <Text style={styles.resetButtonText}>Restablecer</Text>
@@ -4275,7 +4625,12 @@ function SettingsScreen() {
             </View>
           </ScrollView>
 
-          <View style={styles.modalActions}>
+          <View
+            style={[
+              styles.modalActions,
+              { paddingBottom: modalActionPaddingBottom },
+            ]}
+          >
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
               onPress={() => {
@@ -4775,6 +5130,72 @@ function SettingsScreen() {
         </View>
       </Modal>
 
+      {/* Modal de Ayuda y Soporte */}
+      <Modal
+        visible={showHelpSupportModal}
+        transparent={true}
+        onRequestClose={() => setShowHelpSupportModal(false)}
+        animationType="slide"
+      >
+        <View style={styles.calendarModalOverlay}>
+          <View style={styles.calendarModalContent}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarTitle}>Ayuda y Soporte</Text>
+              <TouchableOpacity
+                style={styles.calendarNavButton}
+                onPress={() => setShowHelpSupportModal(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.serviceList}>
+                <View style={{ paddingHorizontal: 4, paddingBottom: 8 }}>
+                  <Text style={{ fontSize: 13, color: '#666' }}>
+                    Email: {supportEmail}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#666', marginTop: 2 }}>
+                    Teléfono: {supportPhone || 'No configurado'}
+                  </Text>
+                </View>
+
+                <TouchableOpacity style={styles.serviceItem} onPress={handleSupportByEmail}>
+                  <Text style={styles.serviceItemText}>Contactar por Email</Text>
+                  <Ionicons name="mail-outline" size={20} color="#667eea" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.serviceItem} onPress={handleSupportByWhatsApp}>
+                  <Text style={styles.serviceItemText}>Contactar por WhatsApp</Text>
+                  <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.serviceItem} onPress={handleSupportByPhone}>
+                  <Text style={styles.serviceItemText}>Llamar a Soporte</Text>
+                  <Ionicons name="call-outline" size={20} color="#4CAF50" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.serviceItem} onPress={handleHelpFaq}>
+                  <Text style={styles.serviceItemText}>Ver Preguntas Frecuentes</Text>
+                  <Ionicons name="help-circle-outline" size={20} color="#FF9800" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.serviceItem}
+                  onPress={() => {
+                    setShowHelpSupportModal(false);
+                    router.push('/terms-and-conditions' as never);
+                  }}
+                >
+                  <Text style={styles.serviceItemText}>Términos y Condiciones</Text>
+                  <Ionicons name="document-text-outline" size={20} color="#607D8B" />
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal de Selección de Profesional para Cliente */}
       <Modal
         visible={showProfessionalSelector}
@@ -5241,7 +5662,11 @@ function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.addPatientForm} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.addPatientForm}
+            contentContainerStyle={{ paddingBottom: scrollContentBottomPadding }}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Información Personal */}
             <View style={styles.formSection}>
               <Text style={styles.formSectionTitle}>Información Personal</Text>
@@ -5444,7 +5869,7 @@ function SettingsScreen() {
           </ScrollView>
 
           {/* Botones de Acción */}
-          <View style={styles.formActions}>
+          <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={handleCancelAddPatient}
@@ -5837,7 +6262,11 @@ function SettingsScreen() {
           </View>
 
           {/* Contenido del Modal */}
-          <ScrollView style={styles.patientDetailsContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.patientDetailsContent}
+            contentContainerStyle={{ paddingBottom: scrollContentBottomPadding }}
+            showsVerticalScrollIndicator={false}
+          >
             {selectedPatientForDetails && (
               <>
                 {/* Información Principal */}
@@ -5915,7 +6344,12 @@ function SettingsScreen() {
           </ScrollView>
 
           {/* Botones de Acción */}
-          <View style={styles.patientDetailsActions}>
+          <View
+            style={[
+              styles.patientDetailsActions,
+              { paddingBottom: modalActionPaddingBottom },
+            ]}
+          >
             <TouchableOpacity
               style={[styles.patientActionButton, styles.editButton]}
               onPress={() => handleEditPatient(selectedPatientForDetails)}
@@ -5947,16 +6381,16 @@ function SettingsScreen() {
       <Modal
         visible={showEditPatientModal}
         transparent={false}
-        onRequestClose={handleCancelEdit}
+        onRequestClose={handleCancelEditPatient}
         animationType="slide"
         presentationStyle="fullScreen"
       >
         <View style={[styles.modalContainer, { height: '100%' }]}>
           {/* Header del Modal */}
-          <View style={styles.editPatientHeader}>
+          <View style={[styles.editPatientHeader, { paddingTop: Math.max(insets.top + 8, 50) }]}>
             <TouchableOpacity
               style={styles.editPatientBackButton}
-              onPress={handleCancelEdit}
+              onPress={handleCancelEditPatient}
             >
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
@@ -6114,10 +6548,10 @@ function SettingsScreen() {
           </ScrollView>
 
           {/* Botones de Acción */}
-          <View style={styles.editPatientActions}>
+          <View style={[styles.editPatientActions, { paddingBottom: modalActionPaddingBottom }]}>
             <TouchableOpacity
               style={[styles.editPatientButton, styles.cancelButton]}
-              onPress={handleCancelEdit}
+              onPress={handleCancelEditPatient}
             >
               <Text style={styles.cancelButtonText}>❌ Cancelar</Text>
             </TouchableOpacity>
@@ -6142,7 +6576,12 @@ function SettingsScreen() {
       >
         <View style={[styles.modalContainer, { height: '100%' }]}>
           {/* Header del Modal */}
-          <View style={styles.patientManagementHeader}>
+          <View
+            style={[
+              styles.patientManagementHeader,
+              { paddingTop: Math.max(insets.top + 8, 12) },
+            ]}
+          >
             <TouchableOpacity
               style={styles.patientManagementBackButton}
               onPress={() => setShowPatientManagementModal(false)}
@@ -6162,19 +6601,32 @@ function SettingsScreen() {
           {/* Panel de Estadísticas */}
           <View style={styles.patientManagementStats}>
             <View style={styles.patientManagementStatCard}>
-              <Text style={styles.patientManagementStatNumber}>30</Text>
+              <Text style={styles.patientManagementStatNumber}>{getRealPatientManagementList().length}</Text>
               <Text style={styles.patientManagementStatLabel}>Total</Text>
             </View>
             <View style={styles.patientManagementStatCard}>
-              <Text style={styles.patientManagementStatNumber}>25</Text>
+              <Text style={styles.patientManagementStatNumber}>
+                {getRealPatientManagementList().filter((row) => row.status === 'active').length}
+              </Text>
               <Text style={styles.patientManagementStatLabel}>Activos</Text>
             </View>
             <View style={styles.patientManagementStatCard}>
-              <Text style={styles.patientManagementStatNumber}>5</Text>
+              <Text style={styles.patientManagementStatNumber}>
+                {getRealPatientManagementList().filter((row) => row.status === 'inactive').length}
+              </Text>
               <Text style={styles.patientManagementStatLabel}>Inactivos</Text>
             </View>
             <View style={styles.patientManagementStatCard}>
-              <Text style={styles.patientManagementStatNumber}>8</Text>
+              <Text style={styles.patientManagementStatNumber}>
+                {
+                  getRealPatientManagementList().filter((row) => {
+                    const parsed = normalizePatientDate(row.lastVisit);
+                    return parsed
+                      ? parsed.getTime() >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).getTime()
+                      : false;
+                  }).length
+                }
+              </Text>
               <Text style={styles.patientManagementStatLabel}>Nuevos</Text>
             </View>
           </View>
@@ -6194,7 +6646,7 @@ function SettingsScreen() {
             
             <TouchableOpacity 
               style={styles.patientManagementActionButton}
-              onPress={() => setShowPatientImportModal(true)}
+              onPress={handleImportPatients}
             >
               <Ionicons name="download" size={20} color="white" />
               <Text style={styles.patientManagementActionButtonText}>Importar</Text>
@@ -6202,7 +6654,7 @@ function SettingsScreen() {
             
             <TouchableOpacity 
               style={styles.patientManagementActionButton}
-              onPress={() => setShowPatientExportModal(true)}
+              onPress={handleExportPatients}
             >
               <Ionicons name="share" size={20} color="white" />
               <Text style={styles.patientManagementActionButtonText}>Exportar</Text>
@@ -6224,16 +6676,28 @@ function SettingsScreen() {
             
             <View style={styles.patientManagementFilters}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <TouchableOpacity style={[styles.patientManagementFilterChip, patientManagementFilter === 'all' && styles.patientManagementFilterChipActive]}>
+                <TouchableOpacity
+                  style={[styles.patientManagementFilterChip, patientManagementFilter === 'all' && styles.patientManagementFilterChipActive]}
+                  onPress={() => setPatientManagementFilter('all')}
+                >
                   <Text style={[styles.patientManagementFilterChipText, patientManagementFilter === 'all' && styles.patientManagementFilterChipTextActive]}>Todos</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.patientManagementFilterChip, patientManagementFilter === 'active' && styles.patientManagementFilterChipActive]}>
+                <TouchableOpacity
+                  style={[styles.patientManagementFilterChip, patientManagementFilter === 'active' && styles.patientManagementFilterChipActive]}
+                  onPress={() => setPatientManagementFilter('active')}
+                >
                   <Text style={[styles.patientManagementFilterChipText, patientManagementFilter === 'active' && styles.patientManagementFilterChipTextActive]}>Activos</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.patientManagementFilterChip, patientManagementFilter === 'inactive' && styles.patientManagementFilterChipActive]}>
+                <TouchableOpacity
+                  style={[styles.patientManagementFilterChip, patientManagementFilter === 'inactive' && styles.patientManagementFilterChipActive]}
+                  onPress={() => setPatientManagementFilter('inactive')}
+                >
                   <Text style={[styles.patientManagementFilterChipText, patientManagementFilter === 'inactive' && styles.patientManagementFilterChipTextActive]}>Inactivos</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.patientManagementFilterChip, patientManagementFilter === 'recent' && styles.patientManagementFilterChipActive]}>
+                <TouchableOpacity
+                  style={[styles.patientManagementFilterChip, patientManagementFilter === 'recent' && styles.patientManagementFilterChipActive]}
+                  onPress={() => setPatientManagementFilter('recent')}
+                >
                   <Text style={[styles.patientManagementFilterChipText, patientManagementFilter === 'recent' && styles.patientManagementFilterChipTextActive]}>Recientes</Text>
                 </TouchableOpacity>
               </ScrollView>
@@ -6242,25 +6706,7 @@ function SettingsScreen() {
 
           {/* Lista de Pacientes con Acciones */}
           <ScrollView style={styles.patientManagementList} showsVerticalScrollIndicator={false}>
-            {[
-              { id: '1', name: 'Ana Martínez', email: 'ana.martinez@email.com', phone: '+54 9 11 1234-5678', status: 'active', lastVisit: '2024-01-15', visits: 12, notes: 'Paciente frecuente, responde bien al tratamiento' },
-              { id: '2', name: 'Luis Rodríguez', email: 'luis.rodriguez@email.com', phone: '+54 9 11 2345-6789', status: 'active', lastVisit: '2024-01-10', visits: 8, notes: 'Requiere seguimiento semanal' },
-              { id: '3', name: 'María González', email: 'maria.gonzalez@email.com', phone: '+54 9 11 3456-7890', status: 'active', lastVisit: '2024-01-12', visits: 15, notes: 'Paciente estable, continuar tratamiento actual' },
-              { id: '4', name: 'Carlos Silva', email: 'carlos.silva@email.com', phone: '+54 9 11 4567-8901', status: 'inactive', lastVisit: '2023-12-20', visits: 3, notes: 'No ha asistido últimamente' },
-              { id: '5', name: 'Laura Torres', email: 'laura.torres@email.com', phone: '+54 9 11 5678-9012', status: 'active', lastVisit: '2024-01-08', visits: 6, notes: 'Nuevo paciente, primera consulta exitosa' }
-            ]
-            .filter(patient => {
-              const matchesSearch = patient.name.toLowerCase().includes((patientManagementSearchQuery || '').toLowerCase()) ||
-                                   patient.email.toLowerCase().includes((patientManagementSearchQuery || '').toLowerCase());
-              
-              if (patientManagementFilter === 'all') return matchesSearch;
-              if (patientManagementFilter === 'active') return matchesSearch && patient.status === 'active';
-              if (patientManagementFilter === 'inactive') return matchesSearch && patient.status === 'inactive';
-              if (patientManagementFilter === 'recent') return matchesSearch && new Date(patient.lastVisit) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-              
-              return matchesSearch;
-            })
-            .map((patient) => (
+            {getRealPatientManagementList().map((patient) => (
               <View key={patient.id} style={[styles.patientManagementCard, patient.status === 'inactive' && styles.patientManagementCardInactive]}>
                 {/* Header de la Tarjeta */}
                 <View style={styles.patientManagementCardHeader}>
@@ -6297,7 +6743,7 @@ function SettingsScreen() {
                 <View style={styles.patientManagementCardActions}>
                   <TouchableOpacity 
                     style={styles.patientManagementAction}
-                    onPress={() => handleViewPatientDetails(patient)}
+                    onPress={() => handlePatientSelect(patient)}
                   >
                     <Ionicons name="eye" size={16} color="#667eea" />
                     <Text style={styles.patientManagementActionText}>Ver</Text>
@@ -6557,21 +7003,28 @@ function SettingsScreen() {
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View
+              style={[
+                styles.privacyModalActions,
+                { paddingBottom: modalActionPaddingBottom },
+              ]}
+            >
+              <View style={styles.privacyPrimaryActions}>
+                <TouchableOpacity
+                  style={[styles.privacyActionButton, styles.cancelButton]}
+                  onPress={() => setShowPrivacyModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.privacyActionButton, styles.saveButton]}
+                  onPress={handleSavePrivacySettings}
+                >
+                  <Text style={styles.saveButtonText}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowPrivacyModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleSavePrivacySettings}
-              >
-                <Text style={styles.saveButtonText}>Guardar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.resetButton]}
+                style={[styles.privacyResetButton, styles.resetButton]}
                 onPress={handleResetPrivacySettings}
               >
                 <Text style={styles.resetButtonText}>Restablecer</Text>
@@ -7239,7 +7692,7 @@ function SettingsScreen() {
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowPaymentSettingsModal(false)}
@@ -7352,7 +7805,7 @@ function SettingsScreen() {
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowDepositHistoryModal(false)}
@@ -7596,7 +8049,7 @@ function SettingsScreen() {
               </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowClinicSettingsModal(false)}
@@ -7688,7 +8141,7 @@ function SettingsScreen() {
               </TouchableOpacity>
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowClinicSelectorModal(false)}
@@ -8441,7 +8894,9 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingTop: 20,
+    paddingBottom: 24,
+    marginBottom: 0,
     borderTopWidth: 1,
     borderTopColor: '#eee',
     backgroundColor: '#fafafa',
@@ -8509,6 +8964,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  privacyModalActions: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    backgroundColor: '#fafafa',
+    gap: 10,
+  },
+  privacyPrimaryActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  privacyActionButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  privacyResetButton: {
+    width: '100%',
+    minHeight: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
   },
   searchContainer: {
     paddingHorizontal: 20,

@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ProfessionalCalendar from '../../components/ProfessionalCalendar';
 import ProfessionalPatientPicker from '../../components/ProfessionalPatientPicker';
 import TimeSlotSelector from '../../components/TimeSlotSelector';
@@ -152,6 +153,11 @@ function parseAppointmentFormDateToLocal(dateStr: string): Date | null {
 }
 
 export default function DashboardScreen() {
+  const insets = useSafeAreaInsets();
+  const modalActionPaddingBottom =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 24, 44)
+      : Math.max(insets.bottom + 12, 24);
   const router = useRouter();
   const { user, logout, hasProAccess } = useAuth();
   const { appointments, addAppointment, refreshAppointments, getUpcomingAppointments, completeAppointment } =
@@ -1745,7 +1751,7 @@ export default function DashboardScreen() {
               )}
             </ScrollView>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => {
@@ -2171,7 +2177,7 @@ export default function DashboardScreen() {
               </View>
                  </View>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
                    <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowMercadoPagoModal(false)}
