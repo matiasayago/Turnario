@@ -74,6 +74,11 @@ function SettingsScreen() {
     }
   }, [user?.service]);
 
+  useEffect(() => {
+    // Reflejar en UI el valor real del perfil (default true cuando viene undefined).
+    setIsOnlineDepositEnabled(user?.clientBookingRequiresDeposit !== false);
+  }, [user?.clientBookingRequiresDeposit]);
+
   
   
   // Estados para el modal de edición de perfil
@@ -130,7 +135,10 @@ function SettingsScreen() {
   // Estados para configuración de precios y señas
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showDepositHistoryModal, setShowDepositHistoryModal] = useState(false);
-  const [isOnlineDepositEnabled, setIsOnlineDepositEnabled] = useState(true);
+  const [isOnlineDepositEnabled, setIsOnlineDepositEnabled] = useState(
+    user?.clientBookingRequiresDeposit !== false
+  );
+  const [isSavingOnlineDepositToggle, setIsSavingOnlineDepositToggle] = useState(false);
   const [showMedicalAuthorizationModal, setShowMedicalAuthorizationModal] = useState(false);
   const [servicePricing, setServicePricing] = useState({
     basePrice: 10000,
@@ -861,6 +869,28 @@ function SettingsScreen() {
 
   const handleNotifications = () => {
     setShowNotificationSettingsModal(true);
+  };
+
+  const handleToggleOnlineDeposit = async () => {
+    if (isSavingOnlineDepositToggle) return;
+    const nextValue = !isOnlineDepositEnabled;
+    setIsOnlineDepositEnabled(nextValue);
+    setIsSavingOnlineDepositToggle(true);
+    try {
+      await updateUserProfile({ clientBookingRequiresDeposit: nextValue });
+      console.log(
+        '✅ clientBookingRequiresDeposit actualizado en backend:',
+        nextValue
+      );
+    } catch (error: any) {
+      setIsOnlineDepositEnabled(!nextValue);
+      Alert.alert(
+        'Error',
+        error?.message || 'No se pudo guardar la configuración de seña.'
+      );
+    } finally {
+      setIsSavingOnlineDepositToggle(false);
+    }
   };
 
   const handlePaymentSettings = () => {
@@ -4052,8 +4082,9 @@ function SettingsScreen() {
               </View>
             </View>
             <TouchableOpacity
-              onPress={() => setIsOnlineDepositEnabled((prev) => !prev)}
-              style={{ paddingHorizontal: 4, paddingVertical: 4 }}
+              onPress={handleToggleOnlineDeposit}
+              disabled={isSavingOnlineDepositToggle}
+              style={{ paddingHorizontal: 4, paddingVertical: 4, opacity: isSavingOnlineDepositToggle ? 0.6 : 1 }}
             >
               <Ionicons
                 name={isOnlineDepositEnabled ? 'toggle' : 'toggle-outline'}
@@ -5020,10 +5051,6 @@ function SettingsScreen() {
                     {isOnlineDepositEnabled ? 'Información de Seña' : 'Confirmación Manual'}
                   </Text>
                   <View style={styles.depositInfoRow}>
-                    <Text style={styles.depositInfoLabel}>Precio del Servicio:</Text>
-                    <Text style={styles.depositInfoValue}>$10,000</Text>
-                  </View>
-                  <View style={styles.depositInfoRow}>
                     <Text style={styles.depositInfoLabel}>
                       {isOnlineDepositEnabled ? 'Seña Requerida (20%):' : 'Estado de la Reserva:'}
                     </Text>
@@ -5229,7 +5256,6 @@ function SettingsScreen() {
                         <Text style={styles.professionalService}>{professional.service}</Text>
                         <View style={styles.professionalDetails}>
                           <Text style={styles.professionalRating}>⭐ {professional.rating}</Text>
-                          <Text style={styles.professionalPrice}>${professional.price}</Text>
                         </View>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#ccc" />

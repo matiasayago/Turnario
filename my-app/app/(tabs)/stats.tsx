@@ -20,6 +20,7 @@ import AddPatientForm from '../../components/AddPatientForm';
 import { useAppointments, type Appointment } from '../../contexts/AppointmentContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMedicalHistory } from '../../contexts/MedicalHistoryContext';
+import { fetchMyPatientsFromAppointments } from '../../services/patientDirectoryService';
 
 const normProfEmail = (e: string | undefined) => String(e || '').trim().toLowerCase();
 
@@ -53,114 +54,41 @@ function patientsSaveKey(user: { email?: string; _id?: string; id?: string } | n
   return id ? `@turnario/prof_patients_v2/id:${id}` : null;
 }
 
-/** Lista inicial solo si no hay nada guardado para ese profesional (clonada al cargar). */
-const DEFAULT_DEMO_PATIENTS: any[] = [
-  {
-    id: '1',
-    name: 'Ana Martínez',
-    email: 'ana.martinez@email.com',
-    phone: '+54 9 11 1234-5678',
-    status: 'active',
-    lastVisit: '2024-01-15',
-    visits: 12,
-    notes: 'Paciente frecuente, responde bien al tratamiento',
-    dateOfBirth: '1985-03-15',
-    address: 'Av. Corrientes 1234, CABA',
-    emergencyContact: 'Carlos Martínez',
-    emergencyContactPhone: '+54 9 11 9876-5432',
-    emergencyContactRelationship: 'Esposo',
-    medicalHistory: 'Hipertensión controlada',
-    diagnosis: 'Ansiedad generalizada',
-    treatmentPlan: 'Terapia cognitivo-conductual',
-    insurance: 'OSDE 210',
-    occupation: 'Contadora',
-    maritalStatus: 'Casada',
-  },
-  {
-    id: '2',
-    name: 'Luis Rodríguez',
-    email: 'luis.rodriguez@email.com',
-    phone: '+54 9 11 2345-6789',
-    status: 'active',
-    lastVisit: '2024-01-10',
-    visits: 8,
-    notes: 'Requiere seguimiento semanal',
-    dateOfBirth: '1978-07-22',
-    address: 'Av. Santa Fe 5678, CABA',
-    emergencyContact: 'María Rodríguez',
-    emergencyContactPhone: '+54 9 11 8765-4321',
-    emergencyContactRelationship: 'Hermana',
-    medicalHistory: 'Depresión recurrente',
-    diagnosis: 'Trastorno depresivo mayor',
-    treatmentPlan: 'Terapia farmacológica + psicológica',
-    insurance: 'Swiss Medical',
-    occupation: 'Ingeniero',
-    maritalStatus: 'Soltero',
-  },
-  {
-    id: '3',
-    name: 'María González',
-    email: 'maria.gonzalez@email.com',
-    phone: '+54 9 11 3456-7890',
-    status: 'active',
-    lastVisit: '2024-01-12',
-    visits: 15,
-    notes: 'Paciente estable, continuar tratamiento actual',
-    dateOfBirth: '1990-11-08',
-    address: 'Av. Córdoba 9012, CABA',
-    emergencyContact: 'Roberto González',
-    emergencyContactPhone: '+54 9 11 7654-3210',
-    emergencyContactRelationship: 'Padre',
-    medicalHistory: 'Sin antecedentes relevantes',
-    diagnosis: 'Trastorno de ansiedad social',
-    treatmentPlan: 'Terapia de exposición gradual',
-    insurance: 'Galeno',
-    occupation: 'Psicóloga',
-    maritalStatus: 'Soltera',
-  },
-  {
-    id: '4',
-    name: 'Carlos Silva',
-    email: 'carlos.silva@email.com',
-    phone: '+54 9 11 4567-8901',
-    status: 'inactive',
-    lastVisit: '2023-12-20',
-    visits: 3,
-    notes: 'No ha asistido últimamente',
-    dateOfBirth: '1975-05-30',
-    address: 'Av. Rivadavia 3456, CABA',
-    emergencyContact: 'Elena Silva',
-    emergencyContactPhone: '+54 9 11 6543-2109',
-    emergencyContactRelationship: 'Esposa',
-    medicalHistory: 'Problemas de pareja',
-    diagnosis: 'Trastorno de personalidad',
-    treatmentPlan: 'Terapia individual y de pareja',
-    insurance: 'Medicus',
-    occupation: 'Comerciante',
-    maritalStatus: 'Casado',
-  },
-  {
-    id: '5',
-    name: 'Laura Torres',
-    email: 'laura.torres@email.com',
-    phone: '+54 9 11 5678-9012',
-    status: 'active',
-    lastVisit: '2024-01-08',
-    visits: 6,
-    notes: 'Nuevo paciente, primera consulta exitosa',
-    dateOfBirth: '1992-09-14',
-    address: 'Av. Callao 7890, CABA',
-    emergencyContact: 'Diego Torres',
-    emergencyContactPhone: '+54 9 11 5432-1098',
-    emergencyContactRelationship: 'Hermano',
-    medicalHistory: 'Crisis de pánico',
-    diagnosis: 'Trastorno de pánico',
-    treatmentPlan: 'Terapia cognitivo-conductual + relajación',
-    insurance: 'OSDE 310',
-    occupation: 'Diseñadora',
-    maritalStatus: 'Soltera',
-  },
-];
+function mapApiPatientToStatsPatient(row: {
+  clientId: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  lastVisit?: string;
+}) {
+  const stableId = String(row.clientId || row.email || row.name || Math.random()).trim();
+  return {
+    id: stableId,
+    clientId: row.clientId || '',
+    userId: row.clientId || '',
+    patientClientId: row.clientId || '',
+    name: row.name || 'Paciente',
+    email: row.email || '',
+    phone: row.phone || '',
+    status: 'active' as const,
+    lastVisit: row.lastVisit || '',
+    visits: 0,
+    notes: '',
+    dateOfBirth: '',
+    address: '',
+    emergencyContact: '',
+    emergencyContactPhone: '',
+    emergencyContactRelationship: '',
+    medicalHistory: '',
+    diagnosis: '',
+    treatmentPlan: '',
+    insurance: '',
+    occupation: '',
+    maritalStatus: '',
+    allergies: '',
+    gender: '',
+  };
+}
 
 export default function StatsScreen() {
   const insets = useSafeAreaInsets();
@@ -353,10 +281,32 @@ export default function StatsScreen() {
 
         if (cancelled || gen !== patientsLoadGeneration.current) return;
 
-        if (loaded) {
-          setPatients(loaded);
-        } else {
-          setPatients(DEFAULT_DEMO_PATIENTS.map((p) => ({ ...p })));
+        const basePatients = loaded || [];
+        setPatients(basePatients);
+
+        const profId = String(u._id ?? u.id ?? '').trim();
+        if (profId) {
+          const fromApiRows = await fetchMyPatientsFromAppointments(profId);
+          if (!cancelled && gen === patientsLoadGeneration.current && fromApiRows.length > 0) {
+            const fromApi = fromApiRows.map(mapApiPatientToStatsPatient);
+            const byKey = new Map<string, any>();
+
+            // Priorizar lo real del backend y completar con datos manuales guardados.
+            for (const p of fromApi) {
+              const key = String(p.clientId || p.email || p.name).toLowerCase();
+              byKey.set(key, p);
+            }
+            for (const p of basePatients) {
+              const key = String(p.clientId || p.email || p.name || p.id || '').toLowerCase();
+              if (!key) continue;
+              if (byKey.has(key)) {
+                byKey.set(key, { ...p, ...byKey.get(key) });
+              } else {
+                byKey.set(key, p);
+              }
+            }
+            setPatients(Array.from(byKey.values()));
+          }
         }
 
         const canonical = patientsSaveKey(u);
@@ -367,7 +317,7 @@ export default function StatsScreen() {
         setPatientsPersistReady(true);
       } catch {
         if (!cancelled && gen === patientsLoadGeneration.current) {
-          setPatients(DEFAULT_DEMO_PATIENTS.map((p) => ({ ...p })));
+          setPatients([]);
           setPatientsPersistReady(true);
         }
       }

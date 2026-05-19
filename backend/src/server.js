@@ -525,12 +525,6 @@ app.post('/api/v1/appointments/create', async (req, res) => {
     const src = String(bookingSource || 'client').toLowerCase();
     /** Reserva hecha por el cliente desde la app → requiere confirmación del profesional */
     const isClientBooking = !!clientOid && src !== 'professional';
-    /** Cita creada por el profesional: seña solo si el body la pide y el profesional tiene activo "Reservas online con seña". */
-    const requireDepositProf =
-      src === 'professional' &&
-      clientOid &&
-      profRequiresClientDeposit &&
-      (req.body.requireDeposit === true || req.body.requireDeposit === 'true');
     /** Preferencia del profesional: seña en reservas online (solo lectura en DB; no se usa el body del cliente). */
     let profRequiresClientDeposit = true;
     try {
@@ -550,6 +544,12 @@ app.post('/api/v1/appointments/create', async (req, res) => {
     } catch (prefErr) {
       console.warn('appointments/create: preferencia seña profesional:', prefErr);
     }
+    /** Cita creada por el profesional: seña solo si el body la pide y el profesional tiene activo "Reservas online con seña". */
+    const requireDepositProf =
+      src === 'professional' &&
+      clientOid &&
+      profRequiresClientDeposit &&
+      (req.body.requireDeposit === true || req.body.requireDeposit === 'true');
     /** Cliente reserva desde la app con seña → pago antes de confirmar */
     const requireDepositClient = isClientBooking && profRequiresClientDeposit;
     const requireDeposit = requireDepositProf || requireDepositClient;

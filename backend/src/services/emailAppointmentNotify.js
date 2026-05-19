@@ -1,6 +1,30 @@
 const User = require('../models/User');
 
 /**
+ * Los documentos Mongoose no exponen los paths al usar `{...doc}`; fecha/hora/servicio quedan undefined y el mail falla.
+ * @param {unknown} doc
+ * @returns {Record<string, unknown>}
+ */
+function toPlainAppointmentDoc(doc) {
+  if (!doc || typeof doc !== 'object') return {};
+  if (typeof doc.toObject === 'function') {
+    try {
+      return doc.toObject({ virtuals: false });
+    } catch {
+      /* continuar */
+    }
+  }
+  if (typeof doc.toJSON === 'function') {
+    try {
+      return doc.toJSON();
+    } catch {
+      /* continuar */
+    }
+  }
+  return { ...doc };
+}
+
+/**
  * @param {import('../services/emailService')} emailService
  * @param {Record<string, unknown>} doc - ExpoAppointment (date, time, service, notes, professionalName, …)
  * @param {string} professionalName
@@ -69,6 +93,8 @@ async function notifyClientByEmail(emailService, clientUserId, kind, doc, option
   const uid = clientUserId != null ? String(clientUserId) : '';
   if (!uid) return;
 
+  const plainDoc = toPlainAppointmentDoc(doc);
+
   try {
     const user = await User.findById(uid).select('email preferences fullName').lean();
     if (!user) return;
@@ -87,21 +113,21 @@ async function notifyClientByEmail(emailService, clientUserId, kind, doc, option
 
     const fromProfile = user.email && String(user.email).trim();
     const fromBooking =
-      doc && doc.patientEmail != null && String(doc.patientEmail).trim()
-        ? String(doc.patientEmail).trim()
+      plainDoc && plainDoc.patientEmail != null && String(plainDoc.patientEmail).trim()
+        ? String(plainDoc.patientEmail).trim()
         : '';
     const destEmail = fromProfile || fromBooking;
     if (!destEmail) return;
 
     const recipient = { ...user, email: destEmail };
 
-    const professionalName = options.professionalName || doc.professionalName;
+    const professionalName = options.professionalName || plainDoc.professionalName;
 
     let professionalClinicName = '';
     let professionalClinicAddress = '';
     let professionalClinicPhone = '';
-    if (doc && doc.professionalId) {
-      const professional = await User.findById(String(doc.professionalId))
+    if (plainDoc && plainDoc.professionalId) {
+      const professional = await User.findById(String(plainDoc.professionalId))
         .select('fullName phone businessInfo.businessName address')
         .lean();
       if (professional) {
@@ -121,7 +147,7 @@ async function notifyClientByEmail(emailService, clientUserId, kind, doc, option
 
     const appointment = toAppointmentRecord(
       {
-        ...doc,
+        ...plainDoc,
         clinicName: professionalClinicName,
         clinicAddress: professionalClinicAddress,
         clinicPhone: professionalClinicPhone,

@@ -2272,6 +2272,25 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
           console.log('✅ Horarios encontrados en backend, convirtiendo...');
           const convertedSchedule = convertAvailabilityToSchedule(availability);
           setWeeklySchedule(convertedSchedule);
+          const apptDuration = Number(availability?.appointmentDuration);
+          if (Number.isFinite(apptDuration) && apptDuration > 0) {
+            setAppointmentDuration(Math.round(apptDuration));
+          }
+          const maxPerDay = Number(availability?.maxAppointmentsPerDay);
+          if (Number.isFinite(maxPerDay) && maxPerDay > 0) {
+            setMaxAppointmentsPerDay(Math.round(maxPerDay));
+          }
+          const advanceDays = Number(availability?.advanceBookingDays);
+          if (Number.isFinite(advanceDays) && advanceDays >= 0) {
+            setAdvanceBookingDays(Math.round(advanceDays));
+          }
+          if (availability?.breakTime?.start) {
+            setBreakStart(String(availability.breakTime.start));
+          }
+          if (availability?.breakTime?.end) {
+            setBreakEnd(String(availability.breakTime.end));
+          }
+          setDefaultTimeRanges(inferDefaultRangesFromAvailability(availability));
           setHasCustomSchedule(true);
           console.log('✅ Horarios cargados desde backend');
         } else {
@@ -2410,6 +2429,46 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
     });
     
     return schedule;
+  };
+
+  const toMinutes = (hhmm: string) => {
+    const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
+    if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+    return h * 60 + mm;
+  };
+
+  const inferDefaultRangesFromAvailability = (availability: any) => {
+    const wh = availability?.workingHours || {};
+    const bt = availability?.breakTime || {};
+    const workStart = typeof wh.start === 'string' && wh.start ? wh.start : '09:00';
+    const workEnd = typeof wh.end === 'string' && wh.end ? wh.end : '18:00';
+    const breakS = typeof bt.start === 'string' && bt.start ? bt.start : '12:00';
+    const breakE = typeof bt.end === 'string' && bt.end ? bt.end : '14:00';
+
+    const ws = toMinutes(workStart);
+    const we = toMinutes(workEnd);
+    const bs = toMinutes(breakS);
+    const be = toMinutes(breakE);
+    if (
+      ws == null ||
+      we == null ||
+      bs == null ||
+      be == null ||
+      ws >= we ||
+      bs >= be ||
+      bs <= ws ||
+      be >= we
+    ) {
+      return [{ start: workStart, end: workEnd }];
+    }
+    return [
+      { start: workStart, end: breakS },
+      { start: breakE, end: workEnd },
+    ];
   };
 
   const onRefresh = async () => {
@@ -2635,15 +2694,54 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
       .map((r) => ({ start: r.start, end: r.end, isCustom: false }));
 
   const saveAllSelectedDates = async () => {
-    if (!selectedDates.length) {
-      Alert.alert('Sin fechas', 'Seleccioná al menos una fecha.');
+    if (isSavingBatch) return;
+    if (!professionalUid) {
+      Alert.alert('Error', 'No se pudo identificar al profesional.');
       return;
     }
-    if (isSavingBatch) return;
     setIsSavingBatch(true);
-    const slots = getDefaultTimeSlots();
-    let saved = 0;
     try {
+      const sortedRanges = [...defaultTimeRanges]
+        .filter((r) => r.start && r.end)
+        .sort((a, b) => {
+          const am = toMinutes(a.start) ?? 0;
+          const bm = toMinutes(b.start) ?? 0;
+          return am - bm;
+        });
+      const workStart = sortedRanges[0]?.start || '09:00';
+      const workEnd = sortedRanges[sortedRanges.length - 1]?.end || '18:00';
+      const middayGap =
+        sortedRanges.length >= 2 &&
+        (toMinutes(sortedRanges[1].start) ?? 0) > (toMinutes(sortedRanges[0].end) ?? 0)
+          ? {
+              start: sortedRanges[0].end,
+              end: sortedRanges[1].start,
+            }
+          : { start: breakStart, end: breakEnd };
+
+      const base = getBackendBaseUrl();
+      const availabilityRes = await fetch(`${base}/api/v1/availability/${professionalUid}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          daysOfWeek: Object.fromEntries(
+            Object.entries(replicateDays).map(([day, enabled]) => [day, Boolean(enabled)])
+          ),
+          workingHours: { start: workStart, end: workEnd },
+          breakTime: middayGap,
+          appointmentDuration,
+          maxAppointmentsPerDay,
+          advanceBookingDays,
+          isActive: true,
+        }),
+      });
+      if (!availabilityRes.ok) {
+        const t = await availabilityRes.text();
+        throw new Error(t || 'No se pudo guardar la configuración por defecto');
+      }
+
+      const slots = getDefaultTimeSlots();
+      let saved = 0;
       for (const date of selectedDates) {
         await handleDateScheduleEdit(
           date,
@@ -2656,13 +2754,19 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
         );
         saved += 1;
       }
-      await loadDateSchedulesFromDB(
-        currentCalendarMonth.getMonth() + 1,
-        currentCalendarMonth.getFullYear()
-      );
-      Alert.alert('✅ Horarios guardados', `Se guardaron ${saved} fechas.`);
-    } catch {
-      Alert.alert('Error', `Se guardaron ${saved} fechas antes de un error. Intentá de nuevo.`);
+      if (saved > 0) {
+        await loadDateSchedulesFromDB(
+          currentCalendarMonth.getMonth() + 1,
+          currentCalendarMonth.getFullYear()
+        );
+      }
+      const msg =
+        saved > 0
+          ? `Configuración por defecto guardada y ${saved} fecha(s) actualizadas.`
+          : 'Se guardaron los horarios por defecto.';
+      Alert.alert('✅ Horarios guardados', msg);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'No se pudo guardar la configuración de horarios.');
     } finally {
       setIsSavingBatch(false);
     }
@@ -3206,7 +3310,7 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
               style={{ flex: 1.4, backgroundColor: isSavingBatch ? '#8fa0eb' : '#5f7ce8', borderRadius: 999, paddingVertical: 12, alignItems: 'center' }}
             >
               <Text style={{ color: '#fff', fontWeight: '800' }}>
-                {isSavingBatch ? '💾 Guardando...' : `💾 Guardar ${selectedDates.length} Fechas`}
+                {isSavingBatch ? '💾 Guardando...' : `💾 Guardar cambios${selectedDates.length ? ` (${selectedDates.length} fechas)` : ''}`}
               </Text>
             </TouchableOpacity>
           </View>

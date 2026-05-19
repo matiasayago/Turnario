@@ -226,13 +226,20 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // SOLUCIÓN DEFINITIVA: NO cargar citas hasta que el usuario esté realmente logueado
   useEffect(() => {
+    const uid = user?._id != null ? String(user._id) : '';
+    const email = String(user?.email || '');
     // Solo cargar citas si hay un usuario REAL (no de prueba) y está autenticado
-    if (user && !user._id.startsWith('test_') && !user.email.includes('test.') && user.email !== 'test.professional@turnario.com') {
+    if (
+      user &&
+      uid &&
+      !uid.startsWith('test_') &&
+      !email.includes('test.') &&
+      email !== 'test.professional@turnario.com'
+    ) {
       console.log('👤 Usuario REAL autenticado, cargando citas...');
       loadAppointments();
     } else {
       console.log('⚠️ Usuario no autenticado o es usuario de prueba, NO cargando citas');
-      // NO cargar nada hasta que haya un usuario real
     }
   }, [user]);
 

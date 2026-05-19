@@ -11,6 +11,44 @@ function getPrimaryFrontendBaseUrl() {
   return first;
 }
 
+/** Fecha Expo suele ser YYYY-MM-DD (string); evitar `new Date(string)` ambiguo o undefined → "Invalid Date". */
+function formatAppointmentDateEs(dateStr) {
+  const s = String(dateStr || '').trim();
+  const isoDay = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (isoDay) {
+    const y = parseInt(isoDay[1], 10);
+    const mo = parseInt(isoDay[2], 10) - 1;
+    const d = parseInt(isoDay[3], 10);
+    const dt = new Date(y, mo, d);
+    if (!Number.isNaN(dt.getTime())) {
+      return dt.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+  }
+  const t = Date.parse(s);
+  if (!Number.isNaN(t)) {
+    return new Date(t).toLocaleDateString('es-ES', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  }
+  return s || '—';
+}
+
+function formatAppointmentTimeDisplay(timeStr) {
+  const head = String(timeStr || '')
+    .trim()
+    .split(/\s*[-–]\s*/)[0]
+    .trim();
+  return head || '—';
+}
+
 class EmailService {
   constructor() {
     this.transporter = null;
@@ -204,8 +242,8 @@ class EmailService {
       serviceName: appointment.service?.name || 'Servicio',
       professionalName: appointment.professional?.fullName || 'Profesional',
       clinicName: appointment.clinic?.name || 'Clínica',
-      date: new Date(appointment.date).toLocaleDateString('es-ES'),
-      time: appointment.time,
+      date: formatAppointmentDateEs(appointment.date),
+      time: formatAppointmentTimeDisplay(appointment.time),
       address: appointment.clinic?.address || 'Dirección no disponible',
       phone: appointment.clinic?.phone || 'Teléfono no disponible',
       notes: appointment.notes || 'Sin notas adicionales'
@@ -222,8 +260,8 @@ class EmailService {
       serviceName: appointment.service?.name || 'Servicio',
       professionalName: appointment.professional?.fullName || 'Profesional',
       clinicName: appointment.clinic?.name || 'Clínica',
-      date: new Date(appointment.date).toLocaleDateString('es-ES'),
-      time: appointment.time,
+      date: formatAppointmentDateEs(appointment.date),
+      time: formatAppointmentTimeDisplay(appointment.time),
       address: appointment.clinic?.address || 'Dirección no disponible',
       phone: appointment.clinic?.phone || 'Teléfono no disponible'
     };
@@ -238,8 +276,8 @@ class EmailService {
       userName: user.fullName,
       serviceName: appointment.service?.name || 'Servicio',
       professionalName: appointment.professional?.fullName || 'Profesional',
-      date: new Date(appointment.date).toLocaleDateString('es-ES'),
-      time: appointment.time,
+      date: formatAppointmentDateEs(appointment.date),
+      time: formatAppointmentTimeDisplay(appointment.time),
       reason: reason || 'Sin motivo especificado',
       rescheduleUrl: `${process.env.FRONTEND_URL || ''}/appointments/new`
     };
@@ -254,8 +292,8 @@ class EmailService {
       userName: user.fullName,
       serviceName: appointment.service?.name || 'Servicio',
       professionalName: appointment.professional?.fullName || 'Profesional',
-      date: new Date(appointment.date).toLocaleDateString('es-ES'),
-      time: appointment.time,
+      date: formatAppointmentDateEs(appointment.date),
+      time: formatAppointmentTimeDisplay(appointment.time),
       rescheduleUrl: `${process.env.FRONTEND_URL || ''}/appointments/new`
     };
 

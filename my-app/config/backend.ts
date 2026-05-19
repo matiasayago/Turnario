@@ -92,7 +92,10 @@ export function getBackendBaseUrl(): string {
   const expoLan = getExpoDevMachineHost();
 
   if (fromEnvRaw && isUsableEnvBackendUrl(fromEnvRaw)) {
-    const normalized = fromEnvRaw.replace(/\/$/, '');
+    let normalized = fromEnvRaw.replace(/\/$/, '');
+    if (/\/api\/v1$/i.test(normalized)) {
+      normalized = normalized.replace(/\/api\/v1$/i, '');
+    }
     if (
       typeof __DEV__ !== 'undefined' &&
       __DEV__ &&
