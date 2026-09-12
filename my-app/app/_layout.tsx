@@ -1,5 +1,6 @@
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
+import * as Linking from 'expo-linking';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
@@ -14,6 +15,58 @@ import { useAuth } from '../contexts/AuthContext';
 
 /** Fondo detrás de la barra de estado (Android edge-to-edge + contraste con iconos oscuros). */
 const STATUS_BAR_SCRIM = '#E4E6ED';
+
+function extractResetTokenFromUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  try {
+    const parsed = Linking.parse(url);
+    const path = String(parsed.path || parsed.hostname || '').replace(/^\//, '');
+    const looksReset =
+      path === 'reset-password' ||
+      String(url).includes('reset-password') ||
+      String(parsed.hostname || '') === 'reset-password';
+    if (!looksReset && !String(url).includes('token=')) return '';
+    const raw = parsed.queryParams?.token;
+    if (Array.isArray(raw)) return String(raw[0] || '').trim();
+    if (raw != null) return String(raw).trim();
+  } catch {
+    // no-op
+  }
+  const m = String(url).match(/[?&#]token=([^&#]+)/i);
+  if (!m) return '';
+  try {
+    return decodeURIComponent(m[1]).trim();
+  } catch {
+    return m[1].trim();
+  }
+}
+
+/** Abre /reset-password desde deep link (email → puente HTTP → myapp://). */
+function PasswordResetDeepLinkBridge() {
+  useEffect(() => {
+    const go = (url: string | null | undefined) => {
+      const token = extractResetTokenFromUrl(url);
+      if (!token) return;
+      router.push({
+        pathname: '/reset-password' as never,
+        params: { token },
+      });
+    };
+
+    let sub: { remove: () => void } | undefined;
+    (async () => {
+      try {
+        go(await Linking.getInitialURL());
+      } catch {
+        // no-op
+      }
+    })();
+    sub = Linking.addEventListener('url', ({ url }) => go(url));
+    return () => sub?.remove();
+  }, []);
+
+  return null;
+}
 
 /** Abre pantalla de nueva contraseña al tocar el push de recuperación (datos desde Expo). */
 function PasswordResetPushBridge() {
@@ -112,6 +165,7 @@ function RootLayoutContent() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
+      <PasswordResetDeepLinkBridge />
       <PasswordResetPushBridge />
       <Providers>
         <RootLayoutContent />

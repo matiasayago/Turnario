@@ -25,6 +25,7 @@ import { useNewAppointment } from '../contexts/NewAppointmentContext';
 import UserService from '../services/asyncStorageUserDemo.js';
 import { isProfessionalUser } from '../utils/userType';
 import CustomCalendar from './CustomCalendar';
+import DateScheduleModal from './DateScheduleModal';
 import FullCalendar from './FullCalendar';
 import TimeSlotSelector from './TimeSlotSelector';
 
@@ -1992,6 +1993,7 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [dateSchedules, setDateSchedules] = useState<{ [date: string]: any }>({});
+  const [dateBeingEdited, setDateBeingEdited] = useState<string | null>(null);
   const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
   const [defaultTimeRanges, setDefaultTimeRanges] = useState([
     { start: '09:00', end: '12:00' },
@@ -2268,10 +2270,21 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
 
         if (cancelled) return;
 
-        if (availability && availability.timeSlots && availability.timeSlots.length > 0) {
+        if (availability) {
           console.log('✅ Horarios encontrados en backend, convirtiendo...');
           const convertedSchedule = convertAvailabilityToSchedule(availability);
           setWeeklySchedule(convertedSchedule);
+          if (availability.daysOfWeek) {
+            setReplicateDays((previous) => ({
+              ...previous,
+              ...Object.fromEntries(
+                Object.entries(availability.daysOfWeek).map(([day, enabled]) => [
+                  day,
+                  Boolean(enabled),
+                ])
+              ),
+            }));
+          }
           const apptDuration = Number(availability?.appointmentDuration);
           if (Number.isFinite(apptDuration) && apptDuration > 0) {
             setAppointmentDuration(Math.round(apptDuration));
@@ -2290,7 +2303,32 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
           if (availability?.breakTime?.end) {
             setBreakEnd(String(availability.breakTime.end));
           }
-          setDefaultTimeRanges(inferDefaultRangesFromAvailability(availability));
+          const scopeWeeks = Number(availability?.replicateScopeWeeks);
+          if (Number.isFinite(scopeWeeks) && scopeWeeks > 0) {
+            setReplicateScopeWeeks(Math.round(scopeWeeks));
+          }
+          setOverwriteDatesWithSchedule(
+            availability?.overwriteDatesWithSchedule === true
+          );
+          const savedRanges = Array.isArray(availability?.defaultTimeRanges)
+            ? availability.defaultTimeRanges.filter(
+                (range: any) =>
+                  range &&
+                  typeof range.start === 'string' &&
+                  typeof range.end === 'string' &&
+                  toMinutes(range.start) != null &&
+                  toMinutes(range.end) != null &&
+                  (toMinutes(range.start) as number) < (toMinutes(range.end) as number)
+              )
+            : [];
+          setDefaultTimeRanges(
+            savedRanges.length > 0
+              ? savedRanges.map((range: any) => ({
+                  start: range.start,
+                  end: range.end,
+                }))
+              : inferDefaultRangesFromAvailability(availability)
+          );
           setHasCustomSchedule(true);
           console.log('✅ Horarios cargados desde backend');
         } else {
@@ -2391,6 +2429,10 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
   // Función para convertir disponibilidad del backend al formato de horarios
   const convertAvailabilityToSchedule = (availability) => {
     const schedule = generateDefaultSchedule();
+    const configuredDays = availability?.daysOfWeek || {};
+    const configuredSlots = Array.isArray(availability?.timeSlots)
+      ? availability.timeSlots
+      : [];
     
     // Mapear días de la semana
     const dayMapping = {
@@ -2404,7 +2446,7 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
     };
     
     // Aplicar configuración de días disponibles
-    Object.entries(availability.daysOfWeek).forEach(([day, isAvailable]) => {
+    Object.entries(configuredDays).forEach(([day, isAvailable]) => {
       if (dayMapping[day] && !isAvailable) {
         // Si el día no está disponible, desactivar todos los horarios
         Object.keys(schedule[dayMapping[day]]).forEach(period => {
@@ -2416,9 +2458,9 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
     });
     
     // Aplicar horarios específicos
-    availability.timeSlots.forEach(timeSlot => {
+    configuredSlots.forEach(timeSlot => {
       Object.keys(schedule).forEach(day => {
-        if (availability.daysOfWeek[day]) {
+        if (configuredDays[day]) {
           Object.keys(schedule[day]).forEach(period => {
             if (schedule[day][period].hasOwnProperty(timeSlot)) {
               schedule[day][period][timeSlot] = true;
@@ -2673,6 +2715,13 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
     }
   };
 
+  const openDateScheduleEdit = (date: string) => {
+    if (!selectedDates.includes(date)) {
+      setSelectedDates((previous) => [...previous, date].sort());
+    }
+    setDateBeingEdited(date);
+  };
+
   const formatDateYmd = (date: Date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -2708,16 +2757,37 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
           const bm = toMinutes(b.start) ?? 0;
           return am - bm;
         });
+      if (
+        sortedRanges.length === 0 ||
+        sortedRanges.some((range) => {
+          const start = toMinutes(range.start);
+          const end = toMinutes(range.end);
+          return start == null || end == null || start >= end;
+        })
+      ) {
+        throw new Error('Revisá los horarios por defecto: cada inicio debe ser anterior al fin.');
+      }
       const workStart = sortedRanges[0]?.start || '09:00';
       const workEnd = sortedRanges[sortedRanges.length - 1]?.end || '18:00';
-      const middayGap =
-        sortedRanges.length >= 2 &&
-        (toMinutes(sortedRanges[1].start) ?? 0) > (toMinutes(sortedRanges[0].end) ?? 0)
-          ? {
-              start: sortedRanges[0].end,
-              end: sortedRanges[1].start,
-            }
-          : { start: breakStart, end: breakEnd };
+      const breakStartMinutes = toMinutes(breakStart);
+      const breakEndMinutes = toMinutes(breakEnd);
+      if (
+        breakStartMinutes == null ||
+        breakEndMinutes == null ||
+        breakStartMinutes >= breakEndMinutes
+      ) {
+        throw new Error('El inicio del descanso debe ser anterior a su finalización.');
+      }
+      if (
+        appointmentDuration < 15 ||
+        appointmentDuration > 180 ||
+        maxAppointmentsPerDay < 1 ||
+        maxAppointmentsPerDay > 100 ||
+        advanceBookingDays < 0 ||
+        advanceBookingDays > 365
+      ) {
+        throw new Error('Hay valores de Configuración General fuera del rango permitido.');
+      }
 
       const base = getBackendBaseUrl();
       const availabilityRes = await fetch(`${base}/api/v1/availability/${professionalUid}`, {
@@ -2728,10 +2798,17 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
             Object.entries(replicateDays).map(([day, enabled]) => [day, Boolean(enabled)])
           ),
           workingHours: { start: workStart, end: workEnd },
-          breakTime: middayGap,
+          breakTime: { start: breakStart, end: breakEnd },
+          defaultTimeRanges: sortedRanges.map((range) => ({
+            start: range.start,
+            end: range.end,
+          })),
           appointmentDuration,
           maxAppointmentsPerDay,
           advanceBookingDays,
+          replicateScopeWeeks,
+          overwriteDatesWithSchedule,
+          professionalName: user?.fullName || user?.email || 'Profesional',
           isActive: true,
         }),
       });
@@ -2739,30 +2816,62 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
         const t = await availabilityRes.text();
         throw new Error(t || 'No se pudo guardar la configuración por defecto');
       }
+      await syncWithBackend(professionalUid);
+
+      // Fechas que estaban disponibles en DB (cargadas) y el profesional deseleccionó
+      const previouslyAvailable = Object.keys(dateSchedules).filter((date) => {
+        const schedule = dateSchedules[date];
+        if (!schedule) return false;
+        const hasSlots = Array.isArray(schedule.timeSlots) && schedule.timeSlots.length > 0;
+        return hasSlots && schedule.isAvailable !== false;
+      });
+      const selectedSet = new Set(selectedDates);
+      const datesToRemove = previouslyAvailable.filter((date) => !selectedSet.has(date));
+
+      let removed = 0;
+      for (const date of datesToRemove) {
+        const delRes = await fetch(`${base}/api/v1/date-schedules/${professionalUid}/${date}`, {
+          method: 'DELETE',
+        });
+        // 404 = ya no existía; se considera ok
+        if (delRes.ok || delRes.status === 404) {
+          removed += 1;
+        } else {
+          const t = await delRes.text();
+          throw new Error(t || `No se pudo quitar la disponibilidad del ${date}`);
+        }
+      }
 
       const slots = getDefaultTimeSlots();
       let saved = 0;
       for (const date of selectedDates) {
+        const existingSchedule = dateSchedules[date];
+        if (existingSchedule && !overwriteDatesWithSchedule) {
+          continue;
+        }
         await handleDateScheduleEdit(
           date,
           {
             timeSlots: slots,
             isAvailable: true,
-            notes: '',
+            notes: existingSchedule?.notes || '',
           },
           { silent: true, skipReload: true }
         );
         saved += 1;
       }
-      if (saved > 0) {
-        await loadDateSchedulesFromDB(
-          currentCalendarMonth.getMonth() + 1,
-          currentCalendarMonth.getFullYear()
-        );
-      }
+
+      await loadDateSchedulesFromDB(
+        currentCalendarMonth.getMonth() + 1,
+        currentCalendarMonth.getFullYear()
+      );
+
+      const parts: string[] = [];
+      if (saved > 0) parts.push(`${saved} fecha(s) disponibles`);
+      if (removed > 0) parts.push(`${removed} fecha(s) quitadas`);
       const msg =
-        saved > 0
-          ? `Configuración por defecto guardada y ${saved} fecha(s) actualizadas.`
+        parts.length > 0
+          ? `Configuración guardada: ${parts.join(', ')}.`
           : 'Se guardaron los horarios por defecto.';
       Alert.alert('✅ Horarios guardados', msg);
     } catch (e: any) {
@@ -2803,10 +2912,7 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
       }
     }
 
-    setSelectedDates((prev) => {
-      const next = overwriteDatesWithSchedule ? generated : Array.from(new Set([...prev, ...generated]));
-      return next.sort();
-    });
+    setSelectedDates((prev) => Array.from(new Set([...prev, ...generated])).sort());
     Alert.alert('✅ Plantilla aplicada', `Se actualizaron ${generated.length} fechas del calendario.`);
   };
 
@@ -3033,46 +3139,11 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
       <View style={styles.actionsSection}>
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => setShowAddScheduleModal(true)}
-        >
-          <Ionicons name="add-circle" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Agregar Horario</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.secondaryButton]}
           onPress={() => setShowScheduleModal(true)}
         >
-          <Ionicons name="settings" size={20} color="#667eea" />
-          <Text style={styles.secondaryButtonText}>Configurar Horarios</Text>
+          <Ionicons name="settings" size={20} color="#fff" />
+          <Text style={styles.actionButtonText}>Configurar Horarios</Text>
         </TouchableOpacity>
-        
-        {hasCustomSchedule && (
-          <TouchableOpacity 
-            style={styles.resetButton} 
-            onPress={() => {
-              Alert.alert(
-                'Restablecer Horarios',
-                '¿Estás seguro de que quieres restablecer a los horarios por defecto?',
-                [
-                  { text: 'Cancelar', style: 'cancel' },
-                  { 
-                    text: 'Restablecer', 
-                    style: 'destructive',
-                    onPress: () => {
-                      setWeeklySchedule(generateDefaultSchedule());
-                      setHasCustomSchedule(false);
-                      Alert.alert('Éxito', 'Horarios restablecidos a valores por defecto');
-                    }
-                  }
-                ]
-              );
-            }}
-          >
-            <Ionicons name="refresh-outline" size={20} color="#ff9800" />
-            <Text style={styles.resetButtonText}>Restablecer por Defecto</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Modal para gestionar horarios - formato clásico 20/04 */}
@@ -3113,7 +3184,7 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
             <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14 }}>
               <Text style={{ fontSize: 22, fontWeight: '700', color: '#222', marginBottom: 6 }}>📅 Seleccionar Fechas Disponibles</Text>
               <Text style={{ fontSize: 16, color: '#6b7280', marginBottom: 12 }}>
-                Solo las fechas que marques aquí (y guardes con horarios) aparecen como disponibles en el calendario de reservas de los clientes.
+                Marcá las fechas disponibles. Si desmarcás una y tocás Guardar, deja de aparecer como disponible para los clientes.
               </Text>
               {isLoadingCalendar ? (
                 <View style={styles.loadingContainer}>
@@ -3127,8 +3198,9 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
                   onDateDeselect={handleDateDeselect}
                   currentMonth={currentCalendarMonth}
                   onMonthChange={handleMonthChange}
-                  onDateScheduleEdit={handleDateScheduleEdit}
+                  onDateScheduleEdit={openDateScheduleEdit}
                   dateSchedules={dateSchedules}
+                  defaultTimeSlots={getDefaultTimeSlots()}
                 />
               )}
             </View>
@@ -3232,18 +3304,18 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
               </Text>
               <View style={{ gap: 10 }}>
                 {[
-                  { label: 'Duración de Citas', value: appointmentDuration, unit: 'min', setValue: setAppointmentDuration },
-                  { label: 'Citas Máximas por Día', value: maxAppointmentsPerDay, unit: 'citas', setValue: setMaxAppointmentsPerDay },
-                  { label: 'Anticipación de Reservas', value: advanceBookingDays, unit: 'días', setValue: setAdvanceBookingDays },
+                  { label: 'Duración de Citas', value: appointmentDuration, unit: 'min', min: 15, max: 180, setValue: setAppointmentDuration },
+                  { label: 'Citas Máximas por Día', value: maxAppointmentsPerDay, unit: 'citas', min: 1, max: 100, setValue: setMaxAppointmentsPerDay },
+                  { label: 'Anticipación de Reservas', value: advanceBookingDays, unit: 'días', min: 0, max: 365, setValue: setAdvanceBookingDays },
                 ].map((cfg) => (
                   <View key={cfg.label} style={{ backgroundColor: '#f8f9ff', borderRadius: 14, padding: 12 }}>
                     <Text style={{ fontWeight: '700', marginBottom: 8 }}>{cfg.label}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-                      <TouchableOpacity onPress={() => cfg.setValue(Math.max(1, cfg.value - 1))} style={{ backgroundColor: '#fff', borderRadius: 999, padding: 8 }}>
+                      <TouchableOpacity onPress={() => cfg.setValue(Math.max(cfg.min, cfg.value - 1))} style={{ backgroundColor: '#fff', borderRadius: 999, padding: 8 }}>
                         <Ionicons name="remove" size={18} color="#667eea" />
                       </TouchableOpacity>
                       <Text style={{ fontWeight: '800', color: '#4c63d2' }}>{cfg.value} {cfg.unit}</Text>
-                      <TouchableOpacity onPress={() => cfg.setValue(cfg.value + 1)} style={{ backgroundColor: '#fff', borderRadius: 999, padding: 8 }}>
+                      <TouchableOpacity onPress={() => cfg.setValue(Math.min(cfg.max, cfg.value + 1))} style={{ backgroundColor: '#fff', borderRadius: 999, padding: 8 }}>
                         <Ionicons name="add" size={18} color="#667eea" />
                       </TouchableOpacity>
                     </View>
@@ -3294,11 +3366,25 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
           >
             <TouchableOpacity
               onPress={() => {
+                // Solo limpia la selección local; al Guardar se eliminan de DB las fechas desmarcadas
                 setSelectedDates([]);
-                setDateSchedules({});
                 setDefaultTimeRanges([{ start: '09:00', end: '12:00' }, { start: '14:00', end: '18:00' }]);
+                setReplicateDays({
+                  sunday: false,
+                  monday: true,
+                  tuesday: true,
+                  wednesday: true,
+                  thursday: true,
+                  friday: true,
+                  saturday: false,
+                });
                 setReplicateScopeWeeks(8);
                 setOverwriteDatesWithSchedule(false);
+                setAppointmentDuration(60);
+                setMaxAppointmentsPerDay(20);
+                setAdvanceBookingDays(30);
+                setBreakStart('12:00');
+                setBreakEnd('14:00');
               }}
               style={{ flex: 1, backgroundColor: '#ff6f47', borderRadius: 999, paddingVertical: 12, alignItems: 'center' }}
             >
@@ -3316,6 +3402,20 @@ function ProfessionalScheduleScreen({ forceOpenScheduleModal = false }: { forceO
           </View>
         </View>
       </Modal>
+
+      <DateScheduleModal
+        visible={Boolean(dateBeingEdited)}
+        date={dateBeingEdited || ''}
+        schedule={dateBeingEdited ? dateSchedules[dateBeingEdited] : undefined}
+        defaultTimeSlots={getDefaultTimeSlots()}
+        onClose={() => setDateBeingEdited(null)}
+        onSave={(date, schedule) => {
+          void handleDateScheduleEdit(date, {
+            ...schedule,
+            notes: dateSchedules[date]?.notes || '',
+          });
+        }}
+      />
 
       {/* Modal para agregar nuevo horario */}
       <Modal

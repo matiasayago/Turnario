@@ -6,6 +6,7 @@ import {
   Alert,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,6 +32,7 @@ import { useAppointments } from '../../contexts/AppointmentContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAvailability } from '../../contexts/AvailabilityContext';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { useNewAppointment } from '../../contexts/NewAppointmentContext';
 import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
 import { canClientCancelAppointment } from '../../utils/appointmentCancellationPolicy';
 import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingSlotsService';
@@ -88,6 +90,7 @@ export default function CalendarScreen() {
     rescheduleAppointmentAsProfessional,
   } = useAppointments();
   const { shouldOpenReservaConSenaModal, closeReservaConSenaModal, openReservaConSenaModal } = useReservaConSena();
+  const { openHoyBookingForm } = useNewAppointment();
   const { availableProfessionals } = useAvailability();
   const [refreshing, setRefreshing] = useState(false);
   const isProfessional = user?.userType === 'professional';
@@ -129,9 +132,15 @@ export default function CalendarScreen() {
     }
     return CLIENT_RESERVA_TOTAL_AMOUNT;
   }, [selectedClientBookingProfessional]);
+  const clientDepositPct = useMemo(() => {
+    const p = selectedClientBookingProfessional;
+    const raw = p && typeof p.depositPercentage === 'number' ? p.depositPercentage : 20;
+    if (!Number.isFinite(raw) || raw < 0) return 20;
+    return Math.min(100, Math.round(raw));
+  }, [selectedClientBookingProfessional]);
   const clientSeniaPreviewAmount = useMemo(
-    () => Math.max(1, Math.round(consultationPriceClientBooking * 0.2)),
-    [consultationPriceClientBooking]
+    () => Math.max(1, Math.round(consultationPriceClientBooking * (clientDepositPct / 100))),
+    [consultationPriceClientBooking, clientDepositPct]
   );
 
   // Estados para los selectores modales
@@ -780,19 +789,23 @@ export default function CalendarScreen() {
   // Mismo criterio que en Hoy (index): catálogo SERVICES + directorio API + mocks
   const getFilteredProfessionals = () => {
     const selectedService = newProfessionalAppointment.service;
-    if (!selectedService?.trim()) {
+    const hasSearch = professionalSearchQuery.trim().length > 0;
+    const hasClinic = professionalClinicQuery.trim().length > 0;
+
+    let list = availableProfessionals;
+    if (selectedService?.trim()) {
+      list = availableProfessionals.filter((p) =>
+        professionalOffersService(p, selectedService, { strict: true })
+      );
+    } else if (!hasSearch && !hasClinic) {
       return [];
     }
 
-    let list = availableProfessionals.filter((p) =>
-      professionalOffersService(p, selectedService, { strict: true })
-    );
-
     console.log(
-      `🔍 Calendario — servicio "${selectedService}": ${list.length} profesional(es)`
+      `🔍 Calendario — servicio "${selectedService || '(ninguno)'}": ${list.length} profesional(es)`
     );
 
-    if (professionalSearchQuery.trim()) {
+    if (hasSearch) {
       const query = professionalSearchQuery.toLowerCase();
       list = list.filter(
         (p) =>
@@ -804,7 +817,7 @@ export default function CalendarScreen() {
       );
     }
 
-    if (professionalClinicQuery.trim()) {
+    if (hasClinic) {
       const cq = professionalClinicQuery.toLowerCase().trim();
       list = list.filter((p) => {
         const loc = (p.location || '').toLowerCase();
@@ -1563,15 +1576,15 @@ export default function CalendarScreen() {
                   // Para profesionales: abrir modal de nueva cita
                   setShowBookingModal(true);
                 } else {
-                  // Para clientes: abrir modal de reserva con seña
-                  console.log('🎯 Cliente solicitando abrir modal de reserva con seña desde Calendario');
-                  handleOpenReservaConSena();
+                  // Mismo formulario de Reservar Cita que en la pestaña Hoy
+                  openHoyBookingForm();
+                  router.push('/(tabs)' as never);
                 }
               }}
             >
               <Ionicons name="add-circle" size={20} color="white" />
               <Text style={styles.actionButtonText}>
-                {isProfessional ? 'Nueva Cita (Prof)' : 'Reservar con Seña'}
+                {isProfessional ? 'Nueva Cita (Prof)' : 'Reservar cita'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1617,7 +1630,7 @@ export default function CalendarScreen() {
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderLeft}>
                 <Text style={styles.modalTitle}>
-                  {isProfessional ? 'Crear Nueva Cita' : 'Reservar Cita con Seña'}
+                  {isProfessional ? 'Crear Nueva Cita' : 'Reservar Cita'}
                 </Text>
                 {!isProfessional && (
                   <View style={styles.formProgressContainer}>
@@ -1830,7 +1843,7 @@ export default function CalendarScreen() {
                     selectedClientBookingProfessional.clientBookingRequiresDeposit !== false && (
                       <>
                         <View style={styles.costRow}>
-                          <Text style={styles.costLabel}>Seña (20%):</Text>
+                          <Text style={styles.costLabel}>Seña ({clientDepositPct}%):</Text>
                           <Text style={styles.costValue}>
                             ${clientSeniaPreviewAmount.toLocaleString('es-AR')}
                           </Text>
@@ -2400,7 +2413,7 @@ export default function CalendarScreen() {
          <View style={styles.modalOverlay}>
            <View style={styles.modalContent}>
              <View style={styles.modalHeader}>
-               <Text style={styles.modalTitle}>💳 Reservar Cita con Seña</Text>
+               <Text style={styles.modalTitle}>Reservar Cita</Text>
                <TouchableOpacity
                  style={styles.closeButton}
                  onPress={handleCloseReservaConSenaModal}

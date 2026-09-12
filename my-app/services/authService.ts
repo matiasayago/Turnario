@@ -108,12 +108,16 @@ export interface User {
   hasProAccess?: boolean;
   /** Solo profesional: si las reservas que hacen los clientes online exigen seña (default true). */
   clientBookingRequiresDeposit?: boolean;
+  /** Solo profesional: precio de consulta en ARS (cliente lo ve en Reservar Cita). */
+  consultationPrice?: number;
+  /** Solo profesional: % de seña sobre consultationPrice (default 20). */
+  depositPercentage?: number;
   service?: string;
   serviceId?: string;
   clinicId?: string;
   isEmailVerified: boolean;
   isActive: boolean;
-  profileImage?: string;
+  profileImage?: string | null;
   createdAt: string;
   updatedAt: string;
   /** Datos extra (cliente): dirección */

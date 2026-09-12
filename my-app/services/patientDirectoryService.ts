@@ -56,13 +56,22 @@ export async function fetchMyPatientsFromAppointments(professionalId: string): P
 
 export async function searchRegisteredClients(q: string): Promise<PickedPatientRow[]> {
   const token = await simpleAuthService.getToken();
+  if (!token) return [];
   const term = q.trim();
-  if (!token || term.length < 2) return [];
-  const params = new URLSearchParams({ role: 'client', search: term, limit: '40' });
+  const params = new URLSearchParams({ role: 'client', limit: '50' });
+  if (term.length > 0) params.set('search', term);
   const res = await fetch(`${getBackendBaseUrl()}/api/users?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    try {
+      const errText = await res.text();
+      console.warn('[Buscar clientes]', res.status, errText.slice(0, 200));
+    } catch {
+      console.warn('[Buscar clientes]', res.status);
+    }
+    return [];
+  }
   const json = await res.json();
   if (!json.success || !Array.isArray(json.data)) return [];
   return json.data.map((u: { _id?: string; fullName?: string; email?: string; phone?: string }) => {

@@ -1,5 +1,5 @@
 ﻿// @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,13 @@ import {
   Platform,
   Linking,
   Share,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -26,17 +29,33 @@ import { useReviews } from '../../contexts/ReviewContext';
 import { useNewAppointment } from '../../contexts/NewAppointmentContext';
 import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
 import { SERVICES, getServicesByCategory, professionalOffersService } from '../../constants/services';
-import { getBackendBaseUrl } from '../../config/backend';
+import { getBackendBaseUrl, resolveMediaUrl } from '../../config/backend';
 import { createPaymentPreference, MERCADOPAGO_CONFIG } from '../../config/mercadopago';
 import { userService } from '../../services';
 import { isProfessionalUser } from '../../utils/userType';
 import { useUsers, useServices } from '../../hooks';
 import { MedicalAuthorizationModal } from '../../components/MedicalAuthorizationModal';
 import { useAvailability } from '../../contexts/AvailabilityContext';
+import { useMedicalHistory } from '../../contexts/MedicalHistoryContext';
+import ProfessionalPatientManagement from '../../components/ProfessionalPatientManagement';
 import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingSlotsService';
 import simpleAuthService from '../../services/simpleAuthService';
 
 function SettingsScreen() {
+  const routeParams = useLocalSearchParams<{
+    patientHistoryRequest?: string;
+    patientId?: string;
+    patientName?: string;
+    patientEmail?: string;
+    patientPhone?: string;
+    patientStatus?: string;
+    patientLastVisit?: string;
+    patientVisits?: string;
+    openManagePatientsRequest?: string;
+    openAddPatientRequest?: string;
+  }>();
+  const processedPatientHistoryRequest = useRef('');
+  const processedManagePatientsRequest = useRef('');
   const insets = useSafeAreaInsets();
   const modalActionPaddingBottom =
     Platform.OS === 'android'
@@ -47,10 +66,15 @@ function SettingsScreen() {
       ? Math.max(insets.bottom + 140, 170)
       : Math.max(insets.bottom + 120, 140);
   const { user, logout, updateUserProfile } = useAuth();
-  const { shouldOpenNewAppointmentModal, closeNewAppointmentModal } = useNewAppointment();
+  const { shouldOpenNewAppointmentModal, closeNewAppointmentModal, openHoyBookingForm } = useNewAppointment();
   const { shouldOpenReservaConSenaModal, appointmentData, closeReservaConSenaModal } = useReservaConSena();
   const { reviews, addReview, deleteReview } = useReviews();
-  const { availableProfessionals } = useAvailability();
+  const { availableProfessionals, refreshProfessionalDirectory } = useAvailability();
+  const {
+    consultations: medicalConsultations,
+    treatments: medicalTreatments,
+    loadPatientHistory,
+  } = useMedicalHistory();
   const isProfessional = isProfessionalUser(user);
   
   // Usar hooks de la API
@@ -79,6 +103,24 @@ function SettingsScreen() {
     setIsOnlineDepositEnabled(user?.clientBookingRequiresDeposit !== false);
   }, [user?.clientBookingRequiresDeposit]);
 
+  useEffect(() => {
+    const base =
+      typeof user?.consultationPrice === 'number' && user.consultationPrice > 0
+        ? Math.round(user.consultationPrice)
+        : 10000;
+    const pct =
+      typeof user?.depositPercentage === 'number' &&
+      user.depositPercentage >= 0 &&
+      user.depositPercentage <= 100
+        ? Math.round(user.depositPercentage)
+        : 20;
+    setServicePricing({
+      basePrice: base,
+      depositPercentage: pct,
+      depositAmount: Math.round(base * (pct / 100)),
+    });
+  }, [user?.consultationPrice, user?.depositPercentage]);
+
   
   
   // Estados para el modal de edición de perfil
@@ -90,6 +132,7 @@ function SettingsScreen() {
     service: user?.service || '',
   });
   const [isEditing, setIsEditing] = useState(false);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
   
   // Estados para el selector de servicios
   const [showServiceSelector, setShowServiceSelector] = useState(false);
@@ -333,6 +376,7 @@ function SettingsScreen() {
   const [showPatientDetailsModal, setShowPatientDetailsModal] = useState(false);
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
   const [selectedPatientForDetails, setSelectedPatientForDetails] = useState<any>(null);
+  const [patientHistoryTab, setPatientHistoryTab] = useState<'notes' | 'treatments'>('notes');
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
   const [catalogView, setCatalogView] = useState<'list' | 'add'>('list'); // 'list' o 'add'
   const [newPatientData, setNewPatientData] = useState({
@@ -713,6 +757,7 @@ function SettingsScreen() {
 
   // Estados para el modal de Gestionar Pacientes
   const [showPatientManagementModal, setShowPatientManagementModal] = useState(false);
+  const [patientsListRevision, setPatientsListRevision] = useState(0);
   const [showAddPatientForm, setShowAddPatientForm] = useState(false);
   const [newPatient, setNewPatient] = useState({
     fullName: '',
@@ -867,6 +912,120 @@ function SettingsScreen() {
     setShowEditProfileModal(true);
   };
 
+  const profilePhotoUri = resolveMediaUrl(user?.profileImage);
+
+  const pickAndUploadProfileImage = async (source: 'camera' | 'library') => {
+    if (isUploadingProfileImage) return;
+    try {
+      if (source === 'camera') {
+        const cam = await ImagePicker.requestCameraPermissionsAsync();
+        if (!cam.granted) {
+          Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara para la foto de perfil.');
+          return;
+        }
+      } else {
+        const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!lib.granted) {
+          Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos para la foto de perfil.');
+          return;
+        }
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.55,
+              base64: true,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.55,
+              base64: true,
+            });
+
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert('Error', 'No se pudo leer la imagen. Probá con otra foto.');
+        return;
+      }
+      const mime =
+        asset.mimeType && /^image\//i.test(asset.mimeType)
+          ? asset.mimeType
+          : 'image/jpeg';
+      const dataUri = `data:${mime};base64,${asset.base64}`;
+      setIsUploadingProfileImage(true);
+      const ok = await updateUserProfile({ profileImage: dataUri });
+      if (!ok) {
+        Alert.alert('Error', 'No se pudo guardar la foto de perfil.');
+        return;
+      }
+      if (isProfessional) {
+        try {
+          await refreshProfessionalDirectory();
+        } catch {
+          // no-op
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'No se pudo actualizar la foto de perfil.');
+    } finally {
+      setIsUploadingProfileImage(false);
+    }
+  };
+
+  const handleChangeProfilePhoto = () => {
+    const buttons: {
+      text: string;
+      style?: 'cancel' | 'destructive' | 'default';
+      onPress?: () => void;
+    }[] = [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Galería',
+        onPress: () => {
+          void pickAndUploadProfileImage('library');
+        },
+      },
+      {
+        text: 'Cámara',
+        onPress: () => {
+          void pickAndUploadProfileImage('camera');
+        },
+      },
+    ];
+    if (user?.profileImage) {
+      buttons.push({
+        text: 'Quitar foto',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setIsUploadingProfileImage(true);
+            try {
+              const ok = await updateUserProfile({ profileImage: null as any });
+              if (!ok) Alert.alert('Error', 'No se pudo quitar la foto.');
+              else if (isProfessional) {
+                try {
+                  await refreshProfessionalDirectory();
+                } catch {
+                  // no-op
+                }
+              }
+            } finally {
+              setIsUploadingProfileImage(false);
+            }
+          })();
+        },
+      });
+    }
+    Alert.alert('Foto de perfil', 'Elegí una opción', buttons);
+  };
+
   const handleNotifications = () => {
     setShowNotificationSettingsModal(true);
   };
@@ -958,26 +1117,43 @@ function SettingsScreen() {
     console.log('🔄 Actualizando selectedPatientForDetails...');
     setSelectedPatientForDetails(patient);
     
-    // Cargar los datos del paciente directamente aquí antes de abrir el modal
-    console.log('🔄 Cargando datos del paciente directamente...');
-    const patientDataForEditing = {
-      fullName: patient.name || '',
-      email: patient.email || '',
-      phone: patient.phone || '',
-      dateOfBirth: patient.dateOfBirth || 'No especificada',
-      gender: patient.gender || 'No especificado',
-      address: patient.address || 'No especificada',
-      emergencyContact: patient.emergencyContact || 'No especificado',
-      medicalHistory: patient.medicalHistory || 'Sin historial registrado',
-      allergies: patient.allergies || 'Sin alergias registradas',
-      notes: patient.notes || `Paciente ${patient.status === 'active' ? 'activo' : 'inactivo'} con ${patient.visits || 0} visita${patient.visits !== 1 ? 's' : ''}. Última visita: ${patient.lastVisit || 'No registrada'}`,
-    };
-    
-    console.log('📝 Datos preparados directamente:', patientDataForEditing);
-    setEditingPatientData(patientDataForEditing);
-    
-    // Ahora abrir el modal de edición
-    setShowEditPatientModal(true);
+    const patientId = String(patient.clientId || patient.id || '').trim();
+    setShowEditPatientModal(false);
+    setShowPatientDetailsModal(false);
+    setShowPatientManagementModal(false);
+    router.push({
+      pathname: '/(tabs)/stats',
+      params: {
+        editPatientRequest: String(Date.now()),
+        editPatient: JSON.stringify({
+          id: patientId,
+          clientId: patientId,
+          name: patient.name || patient.fullName || '',
+          email: patient.email || '',
+          phone: patient.phone || '',
+          dateOfBirth: patient.dateOfBirth || '',
+          gender: patient.gender || '',
+          address:
+            typeof patient.address === 'string'
+              ? patient.address
+              : patient.address?.street || '',
+          emergencyContact: patient.emergencyContact || '',
+          emergencyContactPhone: patient.emergencyContactPhone || '',
+          emergencyContactRelationship: patient.emergencyContactRelationship || '',
+          medicalHistory: patient.medicalHistory || '',
+          allergies: patient.allergies || '',
+          diagnosis: patient.diagnosis || '',
+          treatmentPlan: patient.treatmentPlan || '',
+          insurance: patient.insurance || '',
+          occupation: patient.occupation || '',
+          maritalStatus: patient.maritalStatus || '',
+          notes: patient.notes || '',
+          status: patient.status === 'inactive' ? 'inactive' : 'active',
+          visits: patient.visits || 0,
+          lastVisit: patient.lastVisit || '',
+        }),
+      },
+    });
   };
 
   // Función para guardar los cambios del paciente
@@ -998,10 +1174,23 @@ function SettingsScreen() {
       );
       return;
     }
+
+    const patientId = String(
+      selectedPatientForDetails.clientId || selectedPatientForDetails.id || ''
+    ).trim();
+    if (!isMongoObjectId(patientId)) {
+      Alert.alert(
+        'No se puede guardar',
+        'Este paciente no tiene una cuenta vinculada para guardar los cambios en la base de datos.'
+      );
+      return;
+    }
     
     // Crear el objeto del paciente actualizado
     const updatedPatient = {
       ...selectedPatientForDetails,
+      id: patientId,
+      clientId: patientId,
       name: editingPatientData.fullName,
       email: editingPatientData.email,
       phone: editingPatientData.phone,
@@ -1017,39 +1206,43 @@ function SettingsScreen() {
     console.log('🔄 Paciente actualizado:', updatedPatient);
     
     try {
-      const patientId = String(updatedPatient.id || '').trim();
-      if (isMongoObjectId(patientId)) {
-        const token = await simpleAuthService.getToken();
-        if (!token) {
-          throw new Error('No hay sesión activa para actualizar el paciente.');
-        }
-
-        const response = await fetch(`${getBackendBaseUrl()}/api/users/${patientId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            fullName: editingPatientData.fullName,
-            email: editingPatientData.email,
-            phone: String(editingPatientData.phone || '').replace(/[^\d+]/g, ''),
-            notes: editingPatientData.notes,
-          }),
-        });
-        const json = await response.json().catch(() => ({}));
-        if (!response.ok || !json?.success) {
-          const msg =
-            json?.message ||
-            json?.error ||
-            `No se pudo actualizar el paciente (HTTP ${response.status}).`;
-          throw new Error(msg);
-        }
-
-        await refreshUsers();
-        await refreshAppointments();
+      const token = await simpleAuthService.getToken();
+      if (!token) {
+        throw new Error('No hay sesión activa para actualizar el paciente.');
       }
+
+      const response = await fetch(`${getBackendBaseUrl()}/api/users/${patientId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          fullName: editingPatientData.fullName,
+          email: editingPatientData.email,
+          phone: String(editingPatientData.phone || '').replace(/[^\d+]/g, ''),
+          dateOfBirth: editingPatientData.dateOfBirth,
+          gender: editingPatientData.gender,
+          address: editingPatientData.address,
+          emergencyContact: editingPatientData.emergencyContact,
+          medicalHistory: editingPatientData.medicalHistory,
+          allergies: editingPatientData.allergies,
+          notes: editingPatientData.notes,
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json?.success) {
+        const msg =
+          json?.message ||
+          json?.error ||
+          `No se pudo actualizar el paciente (HTTP ${response.status}).`;
+        throw new Error(msg);
+      }
+
+      await refreshUsers();
+      await refreshAppointments();
+      setPatientsListRevision((prev) => prev + 1);
 
       // Actualizar el paciente seleccionado para detalles
       setSelectedPatientForDetails(updatedPatient);
@@ -2227,7 +2420,21 @@ function SettingsScreen() {
   };
 
   const handleServicePricing = () => {
-    // Abrir modal de configuración de precios y señas
+    const base =
+      typeof user?.consultationPrice === 'number' && user.consultationPrice > 0
+        ? Math.round(user.consultationPrice)
+        : servicePricing.basePrice;
+    const pct =
+      typeof user?.depositPercentage === 'number' &&
+      user.depositPercentage >= 0 &&
+      user.depositPercentage <= 100
+        ? Math.round(user.depositPercentage)
+        : servicePricing.depositPercentage;
+    setServicePricing({
+      basePrice: base,
+      depositPercentage: pct,
+      depositAmount: Math.round(base * (pct / 100)),
+    });
     setShowPricingModal(true);
   };
 
@@ -2238,8 +2445,15 @@ function SettingsScreen() {
   };
 
   const handleBookAppointmentWithDeposit = () => {
-    // Abrir modal de reserva de cita con seña para clientes
-    setShowClientBookingModal(true);
+    // Mismo formulario de Reservar Cita que en la pestaña Hoy
+    openHoyBookingForm();
+    router.push('/(tabs)' as never);
+  };
+
+  const handleMisCitas = () => {
+    // Abrir el mismo formulario de Reservar Cita de Hoy
+    openHoyBookingForm();
+    router.push('/(tabs)' as never);
   };
 
   const handleSubmitClientBookingRequest = () => {
@@ -2560,7 +2774,23 @@ function SettingsScreen() {
 
   const handleManagePatients = () => {
     setShowPatientManagementModal(true);
+    refreshUsers().catch(() => {});
   };
+
+  useEffect(() => {
+    const requestId = String(routeParams.openManagePatientsRequest || '');
+    if (!requestId || processedManagePatientsRequest.current === requestId) return;
+    processedManagePatientsRequest.current = requestId;
+    handleManagePatients();
+  }, [routeParams.openManagePatientsRequest]);
+
+  useEffect(() => {
+    const requestId = String(routeParams.openAddPatientRequest || '');
+    if (!requestId || processedManagePatientsRequest.current === `add:${requestId}`) return;
+    processedManagePatientsRequest.current = `add:${requestId}`;
+    setShowPatientManagementModal(false);
+    setShowAddPatientModal(true);
+  }, [routeParams.openAddPatientRequest]);
 
   // const handleAddPatient = () => {
   //   setShowAddPatientForm(true);
@@ -2689,58 +2919,74 @@ function SettingsScreen() {
 
 
   const handleScheduleAppointment = (patient: any) => {
-    // Cerrar el modal de gestión y abrir el modal de nueva cita
+    if (!patient) return;
+    const patientId = String(patient.clientId || patient.id || '').trim();
     setShowPatientManagementModal(false);
-    // Pre-llenar el formulario con los datos del paciente
-    setNewProfessionalAppointment(prev => ({
-      ...prev,
-      patientName: patient.name,
-      patientEmail: patient.email,
-      patientPhone: patient.phone,
-    }));
-    setShowNewAppointmentModal(true);
-  };
-
-  const handleViewPatientHistory = (patient: any) => {
-    const currentUserId = String(user?._id || user?.id || '');
-    const patientAppointments = getUpcomingAppointments(currentUserId).filter((appointment) => {
-      const byEmail =
-        patient.email &&
-        appointment.patientEmail &&
-        String(appointment.patientEmail).toLowerCase() === String(patient.email).toLowerCase();
-      const byName =
-        patient.name &&
-        appointment.patientName &&
-        String(appointment.patientName).toLowerCase() === String(patient.name).toLowerCase();
-      const byId =
-        patient.id &&
-        appointment.clientId &&
-        String(appointment.clientId) === String(patient.id);
-      return Boolean(byEmail || byName || byId);
+    setShowPatientDetailsModal(false);
+    setShowNewAppointmentModal(false);
+    router.push({
+      pathname: '/(tabs)',
+      params: {
+        newProfessionalAppointmentRequest: String(Date.now()),
+        patientId: isMongoObjectId(patientId) ? patientId : '',
+        patientName: String(patient.name || patient.fullName || ''),
+        patientEmail: String(patient.email || ''),
+        patientPhone: String(patient.phone || ''),
+      },
     });
-
-    const historyLines =
-      patientAppointments.length > 0
-        ? patientAppointments
-            .slice(0, 8)
-            .map(
-              (apt) =>
-                `• ${apt.date} ${apt.time} - ${apt.service} (${apt.status === 'confirmed' ? 'Confirmada' : apt.status})`
-            )
-            .join('\n')
-        : '• No hay citas registradas aún para este paciente.';
-
-    Alert.alert(
-      '📋 Historial del Paciente',
-      `Historial de ${patient.name}:\n\n` +
-      `• Total de visitas: ${patient.visits}\n` +
-      `• Última visita: ${patient.lastVisit}\n` +
-      `• Estado: ${patient.status === 'active' ? 'Activo' : 'Inactivo'}\n` +
-      `• Notas: ${patient.notes}\n\n` +
-      `Últimas citas:\n${historyLines}`,
-      [{ text: 'OK' }]
-    );
   };
+
+  const handleViewPatientHistory = async (patient: any) => {
+    const patientId = String(patient?.id || '').trim();
+    if (!isMongoObjectId(patientId)) {
+      Alert.alert('Historial', 'Este paciente no tiene una cuenta vinculada al historial clínico.');
+      return;
+    }
+    try {
+      await loadPatientHistory(patientId);
+      setSelectedPatientForDetails(patient);
+      setPatientHistoryTab('notes');
+      setShowPatientManagementModal(false);
+      setShowPatientDetailsModal(true);
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'No se pudo cargar el historial del paciente.'
+      );
+    }
+  };
+
+  useEffect(() => {
+    const requestId = String(routeParams.patientHistoryRequest || '');
+    const patientId = String(routeParams.patientId || '').trim();
+    if (
+      !requestId ||
+      processedPatientHistoryRequest.current === requestId ||
+      !isMongoObjectId(patientId)
+    ) {
+      return;
+    }
+    processedPatientHistoryRequest.current = requestId;
+    handleViewPatientHistory({
+      id: patientId,
+      clientId: patientId,
+      name: String(routeParams.patientName || 'Paciente'),
+      email: String(routeParams.patientEmail || ''),
+      phone: String(routeParams.patientPhone || ''),
+      status: String(routeParams.patientStatus || 'active').toLowerCase(),
+      lastVisit: String(routeParams.patientLastVisit || ''),
+      visits: Number(routeParams.patientVisits || 0),
+    });
+  }, [
+    routeParams.patientHistoryRequest,
+    routeParams.patientId,
+    routeParams.patientName,
+    routeParams.patientEmail,
+    routeParams.patientPhone,
+    routeParams.patientStatus,
+    routeParams.patientLastVisit,
+    routeParams.patientVisits,
+  ]);
 
   const normalizePatientDate = (value?: string) => {
     if (!value) return null;
@@ -2761,21 +3007,25 @@ function SettingsScreen() {
 
     clients.forEach((client) => {
       const key = String(client._id || client.email || client.fullName || Math.random());
+      const address =
+        typeof client.address === 'string' ? client.address : client.address?.street || '';
       patientMap.set(key, {
         id: String(client._id || key),
+        clientId: String(client._id || ''),
         name: client.fullName || 'Paciente',
         email: client.email || '',
         phone: client.phone || 'No especificado',
-        status: client.isActive ? 'active' : 'inactive',
+        status: client.isActive === false ? 'inactive' : 'active',
         lastVisit: '',
         visits: 0,
-        notes: 'Paciente registrado en el sistema',
-        dateOfBirth: '',
-        gender: '',
-        address: '',
-        emergencyContact: '',
-        medicalHistory: '',
-        allergies: '',
+        notes: client.clinicalNotes || '',
+        dateOfBirth: client.dateOfBirth || '',
+        gender: client.gender || '',
+        address,
+        emergencyContact: client.emergencyContact || '',
+        medicalHistory: client.medicalHistory || '',
+        allergies: client.allergies || '',
+        hasProfile: true,
       });
     });
 
@@ -2811,16 +3061,21 @@ function SettingsScreen() {
       patientMap.set(key, {
         ...existing,
         id: String(existing.id || appointment.clientId || key),
-        name: existing.name || appointment.patientName || appointment.clientName || 'Paciente',
-        email: existing.email || appointment.patientEmail || '',
-        phone: existing.phone !== 'No especificado' ? existing.phone : appointment.patientPhone || 'No especificado',
+        clientId: String(existing.clientId || appointment.clientId || ''),
+        name: existing.hasProfile
+          ? existing.name
+          : existing.name || appointment.patientName || appointment.clientName || 'Paciente',
+        email: existing.hasProfile ? existing.email : existing.email || appointment.patientEmail || '',
+        phone:
+          existing.hasProfile && existing.phone && existing.phone !== 'No especificado'
+            ? existing.phone
+            : appointment.patientPhone || existing.phone || 'No especificado',
         status: appointment.status === 'cancelled' ? existing.status : 'active',
         visits: Number(existing.visits || 0) + 1,
         lastVisit: shouldReplaceLastVisit ? String(appointment.date || '') : existing.lastVisit,
-        notes:
-          existing.notes && existing.notes !== 'Paciente registrado en el sistema'
-            ? existing.notes
-            : appointment.notes || 'Paciente con historial de citas registradas',
+        notes: existing.hasProfile
+          ? existing.notes
+          : existing.notes || appointment.notes || '',
       });
     });
 
@@ -3685,11 +3940,7 @@ function SettingsScreen() {
     );
   };
 
-  const handleMisCitas = () => {
-    // El modal de "Mis Citas" quedó fuera de esta pantalla; redirigimos al calendario
-    // para que el acceso desde Panel de Cliente vuelva a funcionar.
-    router.push('/(tabs)/calendar' as never);
-  };
+  // handleMisCitas definido arriba (abre formulario de Hoy)
 
   // const getFilteredAppointments = () => {
   //   const userAppointments = getUpcomingAppointments(user?.id || '');
@@ -3914,9 +4165,26 @@ function SettingsScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={40} color="#667eea" />
-          </View>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={handleChangeProfilePhoto}
+            disabled={isUploadingProfileImage}
+            accessibilityRole="button"
+            accessibilityLabel="Cambiar foto de perfil"
+          >
+            {profilePhotoUri ? (
+              <Image source={{ uri: profilePhotoUri }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="person" size={40} color="#667eea" />
+            )}
+            <View style={styles.avatarEditBadge}>
+              {isUploadingProfileImage ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="camera" size={14} color="#fff" />
+              )}
+            </View>
+          </TouchableOpacity>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{user?.fullName}</Text>
             <Text style={styles.profileEmail}>{user?.email}</Text>
@@ -4120,7 +4388,7 @@ function SettingsScreen() {
         <TouchableOpacity style={styles.menuItem} onPress={handleMisCitas}>
             <View style={styles.menuItemLeft}>
               <Ionicons name="calendar" size={24} color="#4CAF50" />
-              <Text style={styles.menuItemText}>Mis Citas</Text>
+              <Text style={styles.menuItemText}>Reservar Cita</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
@@ -4137,14 +4405,6 @@ function SettingsScreen() {
             <View style={styles.menuItemLeft}>
               <Ionicons name="card" size={24} color="#9C27B0" />
               <Text style={styles.menuItemText}>Métodos de Pago</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem} onPress={handleBookAppointmentWithDeposit}>
-            <View style={styles.menuItemLeft}>
-              <Ionicons name="calendar" size={24} color="#4CAF50" />
-              <Text style={styles.menuItemText}>Reservar Cita con Seña</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
@@ -4193,6 +4453,26 @@ function SettingsScreen() {
           </View>
 
           <ScrollView style={styles.modalContent}>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Foto de perfil</Text>
+              <TouchableOpacity
+                style={styles.editProfilePhotoButton}
+                onPress={handleChangeProfilePhoto}
+                disabled={isUploadingProfileImage}
+              >
+                {profilePhotoUri ? (
+                  <Image source={{ uri: profilePhotoUri }} style={styles.editProfilePhoto} />
+                ) : (
+                  <View style={styles.editProfilePhotoPlaceholder}>
+                    <Ionicons name="person" size={36} color="#667eea" />
+                  </View>
+                )}
+                <Text style={styles.editProfilePhotoHint}>
+                  {isUploadingProfileImage ? 'Guardando…' : 'Cambiar foto'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.formSection}>
               <Text style={styles.formLabel}>Nombre Completo *</Text>
               <TextInput
@@ -4912,9 +5192,29 @@ function SettingsScreen() {
               
               <TouchableOpacity
                 style={[styles.modalButton, styles.saveButton]}
-                onPress={() => {
-                  Alert.alert('✅ Configuración Guardada', 'Los precios y señas han sido configurados exitosamente.');
-                  setShowPricingModal(false);
+                onPress={async () => {
+                  try {
+                    const base = Math.max(0, Math.round(Number(servicePricing.basePrice) || 0));
+                    const pct = Math.min(
+                      100,
+                      Math.max(0, Math.round(Number(servicePricing.depositPercentage) || 0))
+                    );
+                    await updateUserProfile({
+                      consultationPrice: base,
+                      depositPercentage: pct,
+                    });
+                    await refreshProfessionalDirectory();
+                    Alert.alert(
+                      '✅ Configuración Guardada',
+                      `Precio de consulta: $${base.toLocaleString('es-AR')}\nSeña: ${pct}% ($${Math.round(base * (pct / 100)).toLocaleString('es-AR')})`
+                    );
+                    setShowPricingModal(false);
+                  } catch (error: any) {
+                    Alert.alert(
+                      'Error',
+                      error?.message || 'No se pudo guardar precios y señas.'
+                    );
+                  }
                 }}
               >
                 <Text style={styles.saveButtonText}>Guardar Configuración</Text>
@@ -4934,7 +5234,7 @@ function SettingsScreen() {
         <View style={styles.calendarModalOverlay}>
           <View style={styles.calendarModalContent}>
             <View style={styles.calendarHeader}>
-              <Text style={styles.calendarTitle}>Reservar Cita con Seña</Text>
+              <Text style={styles.calendarTitle}>Reservar Cita</Text>
               <TouchableOpacity
                 style={styles.calendarNavButton}
                 onPress={() => setShowClientBookingModal(false)}
@@ -6268,7 +6568,7 @@ function SettingsScreen() {
         animationType="slide"
         presentationStyle="fullScreen"
       >
-        <View style={[styles.modalContainer, { height: '100%' }]}>
+        <View style={[styles.modalContainer, styles.patientDetailsModal, { height: '100%' }]}>
           {/* Header del Modal */}
           <View style={styles.patientDetailsHeader}>
             <TouchableOpacity
@@ -6278,12 +6578,8 @@ function SettingsScreen() {
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
             <View style={styles.patientDetailsHeaderContent}>
-              <Text style={styles.patientDetailsTitle}>
-                👤 Detalles del Paciente
-              </Text>
-              <Text style={styles.patientDetailsSubtitle}>
-                Información completa del paciente
-              </Text>
+              <Text style={styles.patientDetailsTitle}>Historial del paciente</Text>
+              <Text style={styles.patientDetailsSubtitle}>Ficha clínica y evolución</Text>
             </View>
           </View>
 
@@ -6299,71 +6595,209 @@ function SettingsScreen() {
                 <View style={styles.patientInfoSection}>
                   <View style={styles.patientAvatarContainer}>
                     <View style={styles.patientAvatar}>
-                      <Ionicons name="person" size={40} color="white" />
+                      <Text style={styles.patientAvatarInitial}>
+                        {String(selectedPatientForDetails.name || 'P').trim().charAt(0).toUpperCase()}
+                      </Text>
                     </View>
-                    <View style={styles.patientStatusContainer}>
+                    <View style={styles.patientIdentity}>
+                      <Text style={styles.patientName}>{selectedPatientForDetails.name}</Text>
                       <View style={styles.patientStatusBadge}>
+                        <View style={styles.patientStatusDot} />
                         <Text style={styles.patientStatusText}>
-                          🟢 Activo
+                          {selectedPatientForDetails.status === 'inactive' ? 'Inactivo' : 'Paciente activo'}
                         </Text>
                       </View>
-                      <Text style={styles.patientVisitsCount}>
-                        {selectedPatientForDetails.visits || 0} visita{selectedPatientForDetails.visits !== 1 ? 's' : ''}
+                    </View>
+                  </View>
+
+                  <View style={styles.patientContactList}>
+                    <View style={styles.patientContactRow}>
+                      <View style={styles.patientContactIcon}>
+                        <Ionicons name="mail-outline" size={17} color="#667eea" />
+                      </View>
+                      <Text style={styles.patientContactText} numberOfLines={1}>
+                        {selectedPatientForDetails.email || 'Sin correo registrado'}
+                      </Text>
+                    </View>
+                    <View style={styles.patientContactRow}>
+                      <View style={styles.patientContactIcon}>
+                        <Ionicons name="call-outline" size={17} color="#667eea" />
+                      </View>
+                      <Text style={styles.patientContactText}>
+                        {selectedPatientForDetails.phone || 'Sin teléfono registrado'}
                       </Text>
                     </View>
                   </View>
-                  
-                  <Text style={styles.patientName}>{selectedPatientForDetails.name}</Text>
-                  <Text style={styles.patientEmail}>{selectedPatientForDetails.email}</Text>
-                  <Text style={styles.patientPhone}>{selectedPatientForDetails.phone}</Text>
                 </View>
 
-                {/* Información Detallada */}
-                <View style={styles.patientDetailsSection}>
-                  <Text style={styles.sectionTitle}>Información Personal</Text>
-                  
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>ID:</Text>
-                    <Text style={styles.detailValue}>{selectedPatientForDetails.id}</Text>
-                  </View>
-                  
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Última Visita:</Text>
-                    <Text style={styles.detailValue}>{selectedPatientForDetails.lastVisit || 'No registrada'}</Text>
-                  </View>
-                  
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Estado:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedPatientForDetails.status === 'active' ? '🟢 Activo' : '🔴 Inactivo'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Historial de Visitas */}
-                <View style={styles.patientDetailsSection}>
-                  <Text style={styles.sectionTitle}>🏥 Historial de Visitas</Text>
-                  
-                  <View style={styles.visitsSummary}>
-                    <View style={styles.visitStatCard}>
-                      <Text style={styles.visitStatNumber}>{selectedPatientForDetails.visits || 0}</Text>
-                      <Text style={styles.visitStatLabel}>Total de Visitas</Text>
+                <View style={styles.patientStatsRow}>
+                  <View style={styles.patientStatCard}>
+                    <View style={[styles.patientStatIcon, { backgroundColor: '#EEF2FF' }]}>
+                      <Ionicons name="calendar-outline" size={20} color="#667eea" />
                     </View>
-                    <View style={styles.visitStatCard}>
-                      <Text style={styles.visitStatNumber}>
-                        {selectedPatientForDetails.lastVisit ? 'Reciente' : 'N/A'}
+                    <View>
+                      <Text style={styles.patientStatNumber}>{selectedPatientForDetails.visits || 0}</Text>
+                      <Text style={styles.patientStatLabel}>Visitas</Text>
+                    </View>
+                  </View>
+                  <View style={styles.patientStatCard}>
+                    <View style={[styles.patientStatIcon, { backgroundColor: '#ECFDF5' }]}>
+                      <Ionicons name="time-outline" size={20} color="#059669" />
+                    </View>
+                    <View style={styles.patientStatText}>
+                      <Text style={styles.patientStatValue} numberOfLines={1}>
+                        {selectedPatientForDetails.lastVisit || 'Sin visitas'}
                       </Text>
-                      <Text style={styles.visitStatLabel}>Última Visita</Text>
+                      <Text style={styles.patientStatLabel}>Última visita</Text>
                     </View>
                   </View>
                 </View>
 
-                {/* Notas y Comentarios */}
-                <View style={styles.patientDetailsSection}>
-                  <Text style={styles.sectionTitle}>📝 Notas y Comentarios</Text>
-                  <Text style={styles.patientNotes}>
-                    {selectedPatientForDetails.notes || 'No hay notas registradas para este paciente.'}
-                  </Text>
+                {/* Historial clínico por categoría */}
+                <View style={styles.clinicalHistorySection}>
+                  <View style={styles.clinicalHistoryHeading}>
+                    <View>
+                      <Text style={styles.clinicalHistoryTitle}>Historial clínico</Text>
+                      <Text style={styles.clinicalHistorySubtitle}>Registros más recientes primero</Text>
+                    </View>
+                    <View style={styles.clinicalHistoryIcon}>
+                      <Ionicons name="document-text-outline" size={21} color="#667eea" />
+                    </View>
+                  </View>
+
+                  <View style={styles.patientHistoryTabs}>
+                    <TouchableOpacity
+                      style={[
+                        styles.patientHistoryTab,
+                        patientHistoryTab === 'notes' && styles.patientHistoryTabActive,
+                      ]}
+                      onPress={() => setPatientHistoryTab('notes')}
+                    >
+                      <Ionicons
+                        name="document-text-outline"
+                        size={18}
+                        color={patientHistoryTab === 'notes' ? '#FFFFFF' : '#64748B'}
+                      />
+                      <Text
+                        style={[
+                          styles.patientHistoryTabText,
+                          patientHistoryTab === 'notes' && styles.patientHistoryTabTextActive,
+                        ]}
+                      >
+                        Notas médicas
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.patientHistoryTab,
+                        patientHistoryTab === 'treatments' && styles.patientHistoryTabActive,
+                      ]}
+                      onPress={() => setPatientHistoryTab('treatments')}
+                    >
+                      <Ionicons
+                        name="medkit-outline"
+                        size={18}
+                        color={patientHistoryTab === 'treatments' ? '#FFFFFF' : '#64748B'}
+                      />
+                      <Text
+                        style={[
+                          styles.patientHistoryTabText,
+                          patientHistoryTab === 'treatments' && styles.patientHistoryTabTextActive,
+                        ]}
+                      >
+                        Tratamientos
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {(() => {
+                    const patientId = String(selectedPatientForDetails.id || '');
+                    const entries = patientHistoryTab === 'notes'
+                      ? medicalConsultations
+                          .filter((item) => String(item.patientId) === patientId)
+                          .sort((a, b) => b.date.getTime() - a.date.getTime())
+                      : medicalTreatments
+                        .filter((item) => String(item.patientId) === patientId)
+                        .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+
+                    if (entries.length === 0) {
+                      return (
+                        <View style={styles.emptyClinicalHistory}>
+                          <View style={styles.emptyClinicalIcon}>
+                            <Ionicons
+                              name={patientHistoryTab === 'notes' ? 'clipboard-outline' : 'medkit-outline'}
+                              size={28}
+                              color="#94A3B8"
+                            />
+                          </View>
+                          <Text style={styles.emptyClinicalTitle}>
+                            {patientHistoryTab === 'notes'
+                              ? 'No hay notas médicas'
+                              : 'No hay tratamientos'}
+                          </Text>
+                          <Text style={styles.emptyClinicalText}>
+                            {patientHistoryTab === 'notes'
+                              ? 'Las notas aparecerán aquí al completar una sesión.'
+                              : 'Los tratamientos aparecerán aquí al completar una sesión.'}
+                          </Text>
+                        </View>
+                      );
+                    }
+                    return entries.map((entry: any, index: number) => {
+                      const isNote = patientHistoryTab === 'notes';
+                      const entryDate = isNote ? entry.date : entry.startDate;
+                      const content = isNote
+                        ? String(entry.notes || '').split('\n\nSesión ')[0].trim()
+                        : String(entry.description || '').trim();
+                      return (
+                        <View key={entry.id} style={styles.timelineItem}>
+                          <View style={styles.timelineRail}>
+                            <View
+                              style={[
+                                styles.timelineDot,
+                                !isNote && styles.treatmentTimelineDot,
+                              ]}
+                            />
+                            {index < entries.length - 1 && <View style={styles.timelineLine} />}
+                          </View>
+                          <View style={styles.sessionCard}>
+                            <View style={styles.sessionCardHeader}>
+                              <View style={styles.sessionDateBadge}>
+                                <Ionicons name="calendar-clear-outline" size={15} color="#4F46E5" />
+                                <Text style={styles.sessionDateText}>
+                                  {entryDate.toLocaleDateString('es-AR')}
+                                </Text>
+                              </View>
+                              <Text style={styles.sessionProfessional} numberOfLines={1}>
+                                {entry.professionalName}
+                              </Text>
+                            </View>
+                            <View style={[styles.sessionBlock, !isNote && styles.treatmentBlock]}>
+                              <View style={styles.sessionBlockTitleRow}>
+                                <Ionicons
+                                  name={isNote ? 'document-text-outline' : 'medkit-outline'}
+                                  size={17}
+                                  color={isNote ? '#667eea' : '#059669'}
+                                />
+                                <Text
+                                  style={
+                                    isNote
+                                      ? styles.sessionNoteTitle
+                                      : styles.sessionTreatmentTitle
+                                  }
+                                >
+                                  {isNote ? 'Nota médica' : entry.name || 'Tratamiento'}
+                                </Text>
+                              </View>
+                              <Text style={styles.sessionBlockText}>
+                                {content || 'Sin detalle registrado.'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    });
+                  })()}
                 </View>
               </>
             )}
@@ -6386,15 +6820,7 @@ function SettingsScreen() {
             
             <TouchableOpacity
               style={[styles.patientActionButton, styles.scheduleButton]}
-              onPress={() => {
-                setShowPatientDetailsModal(false);
-                // Aquí se implementaría la lógica para agendar cita
-                Alert.alert(
-                  '📅 Agendar Cita',
-                  'Función en desarrollo - Próximamente podrás agendar citas directamente desde aquí.',
-                  [{ text: 'OK' }]
-                );
-              }}
+              onPress={() => handleScheduleAppointment(selectedPatientForDetails)}
             >
               <Ionicons name="calendar" size={20} color="white" />
               <Text style={styles.patientActionButtonText}>📅 Agendar Cita</Text>
@@ -6600,6 +7026,22 @@ function SettingsScreen() {
         animationType="slide"
         presentationStyle="fullScreen"
       >
+        <ProfessionalPatientManagement
+          showBack
+          revision={patientsListRevision}
+          onBack={() => setShowPatientManagementModal(false)}
+          onAdd={() => {
+            setShowPatientManagementModal(false);
+            setShowAddPatientModal(true);
+          }}
+          onImport={handleImportPatients}
+          onExport={() => handleExportPatients()}
+          onView={handlePatientSelect}
+          onEdit={handleEditPatient}
+          onSchedule={handleScheduleAppointment}
+          onHistory={handleViewPatientHistory}
+        />
+        {false && (
         <View style={[styles.modalContainer, { height: '100%' }]}>
           {/* Header del Modal */}
           <View
@@ -6803,6 +7245,7 @@ function SettingsScreen() {
             ))}
           </ScrollView>
         </View>
+        )}
       </Modal>
 
       {/* Modal del Calendario de Disponibilidad */}
@@ -8704,6 +9147,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#4F46E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  editProfilePhotoButton: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  editProfilePhoto: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  editProfilePhotoPlaceholder: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editProfilePhotoHint: {
+    fontSize: 14,
+    color: '#667eea',
+    fontWeight: '600',
   },
   profileInfo: {
     flex: 1,
@@ -12568,13 +13051,16 @@ const styles = StyleSheet.create({
   },
 
   // Estilos para el modal de detalles del paciente
+  patientDetailsModal: {
+    backgroundColor: '#F4F6FB',
+  },
   patientDetailsHeader: {
     backgroundColor: '#667eea',
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 48,
+    paddingBottom: 18,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   patientDetailsBackButton: {
     position: 'absolute',
@@ -12584,80 +13070,334 @@ const styles = StyleSheet.create({
   },
   patientDetailsHeaderContent: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 4,
   },
   patientDetailsTitle: {
-    fontSize: 24,
+    fontSize: 21,
     fontWeight: '700',
     color: 'white',
-    marginBottom: 8,
+    marginBottom: 3,
   },
   patientDetailsSubtitle: {
-    fontSize: 16,
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.8)',
   },
   patientDetailsContent: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingTop: 18,
   },
   patientInfoSection: {
-    alignItems: 'center',
-    marginBottom: 30,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   patientAvatarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 16,
   },
   patientAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 62,
+    height: 62,
+    borderRadius: 20,
     backgroundColor: '#667eea',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 15,
+    marginRight: 14,
   },
-  patientStatusContainer: {
-    alignItems: 'flex-start',
+  patientAvatarInitial: {
+    color: '#FFFFFF',
+    fontSize: 27,
+    fontWeight: '800',
+  },
+  patientIdentity: {
+    flex: 1,
   },
   patientStatusBadge: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginBottom: 8,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  patientStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    marginRight: 6,
   },
   patientStatusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  patientVisitsCount: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    color: '#047857',
+    fontSize: 11,
+    fontWeight: '700',
   },
   patientName: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#333',
-    marginBottom: 8,
+    color: '#172033',
+    marginBottom: 7,
+  },
+  patientContactList: {
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F7',
+    paddingTop: 12,
+    gap: 9,
+  },
+  patientContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  patientContactIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: '#F1F3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  patientContactText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#475569',
+  },
+  patientStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  patientStatCard: {
+    flex: 1,
+    minHeight: 74,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    padding: 12,
+  },
+  patientStatIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 9,
+  },
+  patientStatText: {
+    flex: 1,
+  },
+  patientStatNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#172033',
+  },
+  patientStatValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#172033',
+  },
+  patientStatLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  clinicalHistorySection: {
+    marginBottom: 20,
+  },
+  clinicalHistoryHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingHorizontal: 2,
+  },
+  clinicalHistoryTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#172033',
+  },
+  clinicalHistorySubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 3,
+  },
+  clinicalHistoryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  patientHistoryTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#E9EDF5',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 16,
+    gap: 5,
+  },
+  patientHistoryTab: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 11,
+    gap: 7,
+  },
+  patientHistoryTabActive: {
+    backgroundColor: '#667eea',
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  patientHistoryTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  patientHistoryTabTextActive: {
+    color: '#FFFFFF',
+  },
+  emptyClinicalHistory: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 30,
+  },
+  emptyClinicalIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyClinicalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 5,
+  },
+  emptyClinicalText: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 19,
     textAlign: 'center',
   },
-  patientEmail: {
-    fontSize: 16,
-    color: '#667eea',
-    marginBottom: 4,
-    textAlign: 'center',
+  timelineItem: {
+    flexDirection: 'row',
   },
-  patientPhone: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+  timelineRail: {
+    width: 24,
+    alignItems: 'center',
+  },
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginTop: 20,
+    backgroundColor: '#667eea',
+    borderWidth: 3,
+    borderColor: '#DDE3FF',
+  },
+  treatmentTimelineDot: {
+    backgroundColor: '#10B981',
+    borderColor: '#D1FAE5',
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    minHeight: 25,
+    backgroundColor: '#DDE3EE',
+  },
+  sessionCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 15,
+    marginLeft: 7,
+    marginBottom: 13,
+    borderWidth: 1,
+    borderColor: '#E8ECF3',
+  },
+  sessionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 13,
+  },
+  sessionDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 9,
+  },
+  sessionDateText: {
+    fontSize: 12,
+    color: '#4F46E5',
+    fontWeight: '700',
+  },
+  sessionProfessional: {
+    flex: 1,
+    marginLeft: 9,
+    textAlign: 'right',
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  sessionBlock: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 11,
+    padding: 12,
+    marginTop: 7,
+    borderLeftWidth: 3,
+    borderLeftColor: '#818CF8',
+  },
+  treatmentBlock: {
+    backgroundColor: '#F0FDF4',
+    borderLeftColor: '#34D399',
+  },
+  sessionBlockTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 7,
+  },
+  sessionNoteTitle: {
+    fontSize: 12,
+    color: '#4F46E5',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  sessionTreatmentTitle: {
+    fontSize: 12,
+    color: '#047857',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  sessionBlockText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#334155',
   },
   patientDetailsSection: {
     marginBottom: 25,

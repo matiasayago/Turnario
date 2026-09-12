@@ -309,6 +309,22 @@ export const buildApiUrl = (endpoint: string, params?: Record<string, string>): 
   return url;
 };
 
+/** Resuelve foto/media relativa del backend a URL absoluta (o deja data:/http:/file:). */
+export const resolveMediaUrl = (pathOrUrl?: string | null): string | null => {
+  if (!pathOrUrl || typeof pathOrUrl !== 'string') return null;
+  const trimmed = pathOrUrl.trim();
+  if (!trimmed) return null;
+  if (
+    /^data:/i.test(trimmed) ||
+    /^https?:\/\//i.test(trimmed) ||
+    /^file:/i.test(trimmed)
+  ) {
+    return trimmed;
+  }
+  const base = getBackendBaseUrl().replace(/\/$/, '');
+  return `${base}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+};
+
 // Función para verificar si estamos en desarrollo
 export const isDevelopment = (): boolean => {
   return __DEV__ || process.env.NODE_ENV === 'development';

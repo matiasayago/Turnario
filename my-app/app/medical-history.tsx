@@ -37,7 +37,8 @@ export default function MedicalHistoryScreen() {
     deleteConsultation,
     deleteDocument,
     discontinuePrescription,
-    completeTreatment
+    completeTreatment,
+    loadPatientHistory
   } = useMedicalHistory();
 
   // Estado local
@@ -84,6 +85,20 @@ export default function MedicalHistoryScreen() {
     return getPatientStats(currentPatientId);
   }, [currentPatientId, consultations, documents, prescriptions, treatments, getPatientStats]);
 
+  const recentClinicalSessions = useMemo(() => {
+    const treatmentsByConsultation = new Map(
+      filteredTreatments.map((item) => [String(item.consultationId), item])
+    );
+    return filteredConsultations
+      .slice()
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 3)
+      .map((consultation) => ({
+        consultation,
+        treatment: treatmentsByConsultation.get(String(consultation.id)),
+      }));
+  }, [filteredConsultations, filteredTreatments]);
+
   // Resultados de búsqueda
   const searchResults = useMemo(() => {
     if (!currentPatientId || !searchQuery.trim()) return null;
@@ -93,10 +108,16 @@ export default function MedicalHistoryScreen() {
   // Función para refrescar
   const onRefresh = async () => {
     setRefreshing(true);
-    // Simular carga
-    setTimeout(() => {
+    try {
+      if (currentPatientId) await loadPatientHistory(currentPatientId);
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'No se pudo actualizar el historial.'
+      );
+    } finally {
       setRefreshing(false);
-    }, 1000);
+    }
   };
 
   // Funciones de manejo
@@ -161,15 +182,15 @@ export default function MedicalHistoryScreen() {
   // Renderizar tabs
   const renderTabs = () => (
     <View style={styles.tabsContainer}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View style={styles.tabsContent}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'overview' && styles.activeTab]}
           onPress={() => setActiveTab('overview')}
         >
           <Ionicons 
-            name="stats-chart" 
-            size={20} 
-            color={activeTab === 'overview' ? '#2196F3' : '#666'} 
+            name="grid-outline"
+            size={18}
+            color={activeTab === 'overview' ? '#FFFFFF' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'overview' && styles.activeTabText]}>
             Resumen
@@ -181,13 +202,20 @@ export default function MedicalHistoryScreen() {
           onPress={() => setActiveTab('consultations')}
         >
           <Ionicons 
-            name="medical" 
-            size={20} 
-            color={activeTab === 'consultations' ? '#2196F3' : '#666'} 
+            name="document-text-outline"
+            size={18}
+            color={activeTab === 'consultations' ? '#FFFFFF' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'consultations' && styles.activeTabText]}>
-            Consultas ({filteredConsultations.length})
+            Notas
           </Text>
+          {filteredConsultations.length > 0 && (
+            <View style={[styles.tabCount, activeTab === 'consultations' && styles.activeTabCount]}>
+              <Text style={[styles.tabCountText, activeTab === 'consultations' && styles.activeTabCountText]}>
+                {filteredConsultations.length}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -195,12 +223,12 @@ export default function MedicalHistoryScreen() {
           onPress={() => setActiveTab('documents')}
         >
           <Ionicons 
-            name="document-text" 
-            size={20} 
-            color={activeTab === 'documents' ? '#2196F3' : '#666'} 
+            name="folder-outline"
+            size={18}
+            color={activeTab === 'documents' ? '#FFFFFF' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'documents' && styles.activeTabText]}>
-            Documentos ({filteredDocuments.length})
+            Docs
           </Text>
         </TouchableOpacity>
 
@@ -209,12 +237,12 @@ export default function MedicalHistoryScreen() {
           onPress={() => setActiveTab('prescriptions')}
         >
           <Ionicons 
-            name="medical-outline" 
-            size={20} 
-            color={activeTab === 'prescriptions' ? '#2196F3' : '#666'} 
+            name="receipt-outline"
+            size={18}
+            color={activeTab === 'prescriptions' ? '#FFFFFF' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'prescriptions' && styles.activeTabText]}>
-            Prescripciones ({filteredPrescriptions.length})
+            Recetas
           </Text>
         </TouchableOpacity>
 
@@ -223,15 +251,22 @@ export default function MedicalHistoryScreen() {
           onPress={() => setActiveTab('treatments')}
         >
           <Ionicons 
-            name="fitness" 
-            size={20} 
-            color={activeTab === 'treatments' ? '#2196F3' : '#666'} 
+            name="medkit-outline"
+            size={18}
+            color={activeTab === 'treatments' ? '#FFFFFF' : '#64748B'}
           />
           <Text style={[styles.tabText, activeTab === 'treatments' && styles.activeTabText]}>
-            Tratamientos ({filteredTreatments.length})
+            Tratam.
           </Text>
+          {filteredTreatments.length > 0 && (
+            <View style={[styles.tabCount, activeTab === 'treatments' && styles.activeTabCount]}>
+              <Text style={[styles.tabCountText, activeTab === 'treatments' && styles.activeTabCountText]}>
+                {filteredTreatments.length}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
-      </ScrollView>
+      </View>
     </View>
   );
 
@@ -251,6 +286,85 @@ export default function MedicalHistoryScreen() {
         return (
           <View style={styles.overviewContainer}>
             <MedicalHistoryStats stats={patientStats} />
+
+            {!searchQuery && (
+              <View style={styles.recentSection}>
+                <View style={styles.sectionHeading}>
+                  <View>
+                    <Text style={styles.sectionTitle}>Actividad reciente</Text>
+                    <Text style={styles.sectionSubtitle}>Tus últimas sesiones registradas</Text>
+                  </View>
+                  {filteredConsultations.length > 3 && (
+                    <TouchableOpacity
+                      style={styles.viewAllButton}
+                      onPress={() => setActiveTab('consultations')}
+                    >
+                      <Text style={styles.viewAllText}>Ver todas</Text>
+                      <Ionicons name="chevron-forward" size={15} color="#5B5FEF" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {recentClinicalSessions.length === 0 ? (
+                  <View style={styles.emptyHistory}>
+                    <View style={styles.emptyHistoryIcon}>
+                      <Ionicons name="clipboard-outline" size={28} color="#94A3B8" />
+                    </View>
+                    <Text style={styles.emptyHistoryTitle}>Tu historial está vacío</Text>
+                    <Text style={styles.emptyHistoryText}>
+                      Las notas y tratamientos aparecerán cuando un profesional complete una sesión.
+                    </Text>
+                  </View>
+                ) : (
+                  recentClinicalSessions.map(({ consultation, treatment }, index) => {
+                    const cleanNotes = String(consultation.notes || '')
+                      .split('\n\nSesión ')[0]
+                      .trim();
+                    return (
+                      <View key={consultation.id} style={styles.timelineItem}>
+                        <View style={styles.timelineRail}>
+                          <View style={styles.timelineDot} />
+                          {index < recentClinicalSessions.length - 1 && (
+                            <View style={styles.timelineLine} />
+                          )}
+                        </View>
+                        <View style={styles.sessionCard}>
+                          <View style={styles.sessionHeader}>
+                            <View style={styles.sessionDateBadge}>
+                              <Ionicons name="calendar-clear-outline" size={14} color="#4F46E5" />
+                              <Text style={styles.sessionDate}>
+                                {consultation.date.toLocaleDateString('es-AR')}
+                              </Text>
+                            </View>
+                            <Text style={styles.sessionProfessional} numberOfLines={1}>
+                              {consultation.professionalName}
+                            </Text>
+                          </View>
+                          {cleanNotes ? (
+                            <View style={styles.sessionContent}>
+                              <View style={styles.sessionLabelRow}>
+                                <Ionicons name="document-text-outline" size={16} color="#5B5FEF" />
+                                <Text style={styles.noteLabel}>NOTA MÉDICA</Text>
+                              </View>
+                              <Text style={styles.sessionText}>{cleanNotes}</Text>
+                            </View>
+                          ) : null}
+                          {treatment ? (
+                            <View style={[styles.sessionContent, styles.treatmentContent]}>
+                              <View style={styles.sessionLabelRow}>
+                                <Ionicons name="medkit-outline" size={16} color="#059669" />
+                                <Text style={styles.treatmentLabel}>TRATAMIENTO</Text>
+                              </View>
+                              <Text style={styles.sessionText}>{treatment.description}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            )}
             
             {searchQuery && searchResults && (
               <View style={styles.searchResultsContainer}>
@@ -321,13 +435,18 @@ export default function MedicalHistoryScreen() {
             renderItem={({ item }) => (
               <MedicalConsultationItem
                 consultation={item}
-                onEdit={() => {/* Implementar edición */}}
-                onDelete={handleDeleteConsultation}
               />
             )}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyList}>
+                <Ionicons name="document-text-outline" size={34} color="#94A3B8" />
+                <Text style={styles.emptyListTitle}>No hay notas médicas</Text>
+                <Text style={styles.emptyListText}>Todavía no tenés notas de sesiones registradas.</Text>
+              </View>
+            )}
             refreshControl={listRefreshControl}
           />
         );
@@ -346,6 +465,13 @@ export default function MedicalHistoryScreen() {
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyList}>
+                <Ionicons name="folder-open-outline" size={34} color="#94A3B8" />
+                <Text style={styles.emptyListTitle}>No hay documentos</Text>
+                <Text style={styles.emptyListText}>Tus documentos médicos aparecerán aquí.</Text>
+              </View>
+            )}
             refreshControl={listRefreshControl}
           />
         );
@@ -364,6 +490,13 @@ export default function MedicalHistoryScreen() {
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyList}>
+                <Ionicons name="receipt-outline" size={34} color="#94A3B8" />
+                <Text style={styles.emptyListTitle}>No hay prescripciones</Text>
+                <Text style={styles.emptyListText}>Tus prescripciones aparecerán aquí.</Text>
+              </View>
+            )}
             refreshControl={listRefreshControl}
           />
         );
@@ -375,14 +508,18 @@ export default function MedicalHistoryScreen() {
             renderItem={({ item }) => (
               <TreatmentItem
                 treatment={item}
-                onEdit={() => {/* Implementar edición */}}
-                onComplete={handleCompleteTreatment}
-                onAddMilestone={() => {/* Implementar agregar hito */}}
               />
             )}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyList}>
+                <Ionicons name="medkit-outline" size={34} color="#94A3B8" />
+                <Text style={styles.emptyListTitle}>No hay tratamientos</Text>
+                <Text style={styles.emptyListText}>Todavía no tenés tratamientos registrados.</Text>
+              </View>
+            )}
             refreshControl={listRefreshControl}
           />
         );
@@ -420,15 +557,19 @@ export default function MedicalHistoryScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Historial médico</Text>
-        <Text style={styles.headerSubtitle}>
-          Toda la información asociada a tu cuenta
-        </Text>
+        <View style={styles.headerIcon}>
+          <Ionicons name="heart-outline" size={24} color="#FFFFFF" />
+        </View>
+        <View style={styles.headerCopy}>
+          <Text style={styles.headerEyebrow}>MI SALUD</Text>
+          <Text style={styles.headerTitle}>Historial médico</Text>
+          <Text style={styles.headerSubtitle}>Tu información clínica en un solo lugar</Text>
+        </View>
       </View>
 
       {/* Barra de búsqueda */}
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
+        <Ionicons name="search-outline" size={20} color="#64748B" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Buscar en historial médico..."
@@ -468,7 +609,7 @@ export default function MedicalHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F4F6FB',
   },
   centeredMessage: {
     justifyContent: 'center',
@@ -490,76 +631,308 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   header: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#667eea',
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  headerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginRight: 13,
+  },
+  headerCopy: {
+    flex: 1,
+  },
+  headerEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.3,
+    color: 'rgba(255,255,255,0.72)',
+    marginBottom: 2,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 23,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.82)',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
-    marginVertical: 16,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    marginTop: 14,
+    marginBottom: 12,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#E7EAF1',
   },
   searchIcon: {
     marginRight: 12,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#333',
+    fontSize: 14,
+    color: '#172033',
   },
   clearSearchButton: {
     padding: 4,
   },
   tabsContainer: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
+  tabsContent: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingBottom: 10,
+    gap: 5,
   },
   tab: {
-    flexDirection: 'row',
+    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 4,
-    borderRadius: 8,
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    minHeight: 59,
+    paddingHorizontal: 3,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E7EAF1',
   },
   activeTab: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#667eea',
+    borderColor: '#667eea',
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-    marginLeft: 8,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 4,
+    textAlign: 'center',
   },
   activeTabText: {
-    color: '#2196F3',
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  tabCount: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF2FF',
+  },
+  activeTabCount: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  tabCountText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#4F46E5',
+  },
+  activeTabCountText: {
+    color: '#FFFFFF',
   },
   content: {
     flex: 1,
   },
   overviewContainer: {
     padding: 16,
+    paddingTop: 8,
+  },
+  recentSection: {
+    marginTop: 6,
+  },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+    paddingHorizontal: 2,
+  },
+  sectionTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#172033',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 3,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingLeft: 10,
+  },
+  viewAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5B5FEF',
+  },
+  emptyHistory: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 26,
+    paddingVertical: 30,
+  },
+  emptyHistoryIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyHistoryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 5,
+  },
+  emptyHistoryText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  timelineItem: {
+    flexDirection: 'row',
+  },
+  timelineRail: {
+    width: 24,
+    alignItems: 'center',
+  },
+  timelineDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginTop: 19,
+    backgroundColor: '#667eea',
+    borderWidth: 3,
+    borderColor: '#DDE3FF',
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    minHeight: 25,
+    backgroundColor: '#DDE3EE',
+  },
+  sessionCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginLeft: 7,
+    marginBottom: 13,
+    borderWidth: 1,
+    borderColor: '#E8ECF3',
+  },
+  sessionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sessionDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 9,
+  },
+  sessionDate: {
+    fontSize: 12,
+    color: '#4F46E5',
+    fontWeight: '700',
+  },
+  sessionProfessional: {
+    flex: 1,
+    marginLeft: 8,
+    textAlign: 'right',
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  sessionContent: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 11,
+    padding: 11,
+    marginTop: 7,
+    borderLeftWidth: 3,
+    borderLeftColor: '#818CF8',
+  },
+  treatmentContent: {
+    backgroundColor: '#F0FDF4',
+    borderLeftColor: '#34D399',
+  },
+  sessionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  noteLabel: {
+    fontSize: 11,
+    color: '#4F46E5',
+    fontWeight: '800',
+  },
+  treatmentLabel: {
+    fontSize: 11,
+    color: '#047857',
+    fontWeight: '800',
+  },
+  sessionText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#334155',
+  },
+  emptyList: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 54,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    marginTop: 8,
+  },
+  emptyListTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+    marginTop: 12,
+  },
+  emptyListText: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginTop: 5,
   },
   searchResultsContainer: {
     marginTop: 16,
@@ -582,5 +955,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+    paddingTop: 8,
+    paddingBottom: 36,
   },
 });

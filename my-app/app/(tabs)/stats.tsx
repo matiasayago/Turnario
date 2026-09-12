@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
@@ -20,7 +20,10 @@ import AddPatientForm from '../../components/AddPatientForm';
 import { useAppointments, type Appointment } from '../../contexts/AppointmentContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useMedicalHistory } from '../../contexts/MedicalHistoryContext';
+import ProfessionalPatientManagement from '../../components/ProfessionalPatientManagement';
 import { fetchMyPatientsFromAppointments } from '../../services/patientDirectoryService';
+import { getBackendBaseUrl } from '../../config/backend';
+import { simpleAuthService } from '../../services/simpleAuthService';
 
 const normProfEmail = (e: string | undefined) => String(e || '').trim().toLowerCase();
 
@@ -91,6 +94,11 @@ function mapApiPatientToStatsPatient(row: {
 }
 
 export default function StatsScreen() {
+  const routeParams = useLocalSearchParams<{
+    editPatientRequest?: string;
+    editPatient?: string;
+  }>();
+  const processedEditRequest = useRef('');
   const insets = useSafeAreaInsets();
   const modalActionPaddingBottom =
     Platform.OS === 'android'
@@ -103,6 +111,7 @@ export default function StatsScreen() {
     getTreatmentsByPatient,
     getDocumentsByPatient,
     getPrescriptionsByPatient,
+    loadPatientHistory,
   } = useMedicalHistory();
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -451,33 +460,90 @@ export default function StatsScreen() {
     setShowPatientDetailsModal(true);
   };
 
-  const handleEditPatient = (patient: any) => {
-    setEditingPatient(patient);
+  const handleEditPatient = async (patient: any) => {
+    const patientId = String(patient?.clientId || patient?.id || '').trim();
+    let source = patient;
+
+    if (/^[a-fA-F0-9]{24}$/.test(patientId)) {
+      try {
+        const token = await simpleAuthService.getToken();
+        if (token) {
+          const response = await fetch(`${getBackendBaseUrl()}/api/v1/users/${patientId}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+            },
+          });
+          const json = await response.json().catch(() => ({}));
+          const remote = json?._id ? json : json?.data;
+          if (response.ok && remote) {
+            source = {
+              ...patient,
+              id: String(remote._id || patientId),
+              clientId: String(remote._id || patientId),
+              name: remote.fullName || patient.name || '',
+              email: remote.email || patient.email || '',
+              phone: remote.phone || patient.phone || '',
+              dateOfBirth: remote.dateOfBirth || '',
+              gender: remote.gender || '',
+              address:
+                typeof remote.address === 'string'
+                  ? remote.address
+                  : remote.address?.street || patient.address || '',
+              emergencyContact: remote.emergencyContact || '',
+              medicalHistory: remote.medicalHistory || '',
+              allergies: remote.allergies || '',
+              notes: remote.clinicalNotes || patient.notes || '',
+            };
+          }
+        }
+      } catch {
+        // Si falla la lectura remota, se edita con los datos locales disponibles.
+      }
+    }
+
+    setEditingPatient(source);
     setNewPatientData({
       ...emptyPatientForm(),
-      fullName: patient.name || '',
-      email: patient.email || '',
-      phone: patient.phone || '',
-      dateOfBirth: patient.dateOfBirth || '',
-      gender: patient.gender || '',
-      address: patient.address || '',
-      emergencyContact: patient.emergencyContact || '',
-      emergencyContactPhone: patient.emergencyContactPhone || '',
-      emergencyContactRelationship: patient.emergencyContactRelationship || '',
-      medicalHistory: patient.medicalHistory || '',
-      allergies: patient.allergies || '',
-      diagnosis: patient.diagnosis || '',
-      treatmentPlan: patient.treatmentPlan || '',
-      insurance: patient.insurance || '',
-      occupation: patient.occupation || '',
-      maritalStatus: patient.maritalStatus || '',
-      notes: patient.notes || '',
-      patientStatus: patient.status === 'inactive' ? 'inactive' : 'active',
-      visitsCount: patient.visits != null ? String(patient.visits) : '',
-      lastVisitDate: patient.lastVisit || '',
+      fullName: source.name || '',
+      email: source.email || '',
+      phone: source.phone || '',
+      dateOfBirth: source.dateOfBirth || '',
+      gender: source.gender || '',
+      address: source.address || '',
+      emergencyContact: source.emergencyContact || '',
+      emergencyContactPhone: source.emergencyContactPhone || '',
+      emergencyContactRelationship: source.emergencyContactRelationship || '',
+      medicalHistory: source.medicalHistory || '',
+      allergies: source.allergies || '',
+      diagnosis: source.diagnosis || '',
+      treatmentPlan: source.treatmentPlan || '',
+      insurance: source.insurance || '',
+      occupation: source.occupation || '',
+      maritalStatus: source.maritalStatus || '',
+      notes: source.notes || '',
+      patientStatus: source.status === 'inactive' ? 'inactive' : 'active',
+      visitsCount: source.visits != null ? String(source.visits) : '',
+      lastVisitDate: source.lastVisit || '',
     });
     setShowEditPatientModal(true);
   };
+
+  useEffect(() => {
+    const requestId = String(routeParams.editPatientRequest || '');
+    if (!requestId || processedEditRequest.current === requestId) return;
+    const raw = Array.isArray(routeParams.editPatient)
+      ? routeParams.editPatient[0]
+      : routeParams.editPatient;
+    if (!raw) return;
+    try {
+      const patient = JSON.parse(raw);
+      processedEditRequest.current = requestId;
+      handleEditPatient(patient);
+    } catch {
+      Alert.alert('Editar paciente', 'No se pudo abrir el formulario de edición.');
+    }
+  }, [routeParams.editPatientRequest, routeParams.editPatient]);
 
   const buildPatientHistoryForSelected = useCallback(
     (patient: any) => {
@@ -723,10 +789,31 @@ export default function StatsScreen() {
     setShowScheduleModal(true);
   };
 
-  const handleViewPatientHistory = (patient: any) => {
-    setSelectedPatientForHistory(patient);
-    setPatientHistoryData(buildPatientHistoryForSelected(patient));
-    setShowPatientHistoryModal(true);
+  useEffect(() => {
+    if (showPatientHistoryModal && selectedPatientForHistory) {
+      setPatientHistoryData(buildPatientHistoryForSelected(selectedPatientForHistory));
+    }
+  }, [showPatientHistoryModal, selectedPatientForHistory, buildPatientHistoryForSelected]);
+
+  const handleViewPatientHistory = async (patient: any) => {
+    const patientId = String(patient?.clientId || patient?.id || '').trim();
+    if (!/^[a-fA-F0-9]{24}$/.test(patientId)) {
+      Alert.alert('Historial', 'Este paciente no tiene una cuenta vinculada al historial clínico.');
+      return;
+    }
+    router.push({
+      pathname: '/(tabs)/settings',
+      params: {
+        patientHistoryRequest: String(Date.now()),
+        patientId,
+        patientName: String(patient?.name || patient?.fullName || 'Paciente'),
+        patientEmail: String(patient?.email || ''),
+        patientPhone: String(patient?.phone || ''),
+        patientStatus: String(patient?.status || 'active'),
+        patientLastVisit: String(patient?.lastVisit || ''),
+        patientVisits: String(patient?.visits || patient?.sessionsCompleted || 0),
+      },
+    });
   };
 
   const handleAddNewPatient = () => {
@@ -863,60 +950,93 @@ export default function StatsScreen() {
     setShowAddPatientForm(false);
   };
 
-  const handleSaveEditPatient = () => {
+  const handleSaveEditPatient = async () => {
     if (!newPatientData.fullName || !newPatientData.email || !newPatientData.phone) {
       Alert.alert('Error', 'Por favor completa los campos obligatorios (Nombre, Email, Teléfono)');
       return;
     }
+    if (isSavingPatientEdit.current) return;
 
-    const eid = editingPatient?.id != null ? String(editingPatient.id) : '';
-    const rawVisits = String(newPatientData.visitsCount ?? '').trim();
-    const visits =
-      rawVisits === ''
-        ? (editingPatient?.visits ?? 0)
-        : parseInt(rawVisits, 10) || 0;
-    const patch = {
-      name: newPatientData.fullName,
-      email: newPatientData.email,
-      phone: newPatientData.phone,
-      dateOfBirth: newPatientData.dateOfBirth,
-      gender: newPatientData.gender,
-      address: newPatientData.address,
-      emergencyContact: newPatientData.emergencyContact,
-      emergencyContactPhone: newPatientData.emergencyContactPhone || '',
-      emergencyContactRelationship: newPatientData.emergencyContactRelationship || '',
-      medicalHistory: newPatientData.medicalHistory,
-      allergies: newPatientData.allergies || '',
-      diagnosis: newPatientData.diagnosis || '',
-      treatmentPlan: newPatientData.treatmentPlan || '',
-      insurance: newPatientData.insurance || '',
-      occupation: newPatientData.occupation || '',
-      maritalStatus: newPatientData.maritalStatus || '',
-      notes: newPatientData.notes,
-      status: newPatientData.patientStatus === 'inactive' ? 'inactive' : 'active',
-      visits,
-      lastVisit:
-        newPatientData.lastVisitDate ||
-        editingPatient?.lastVisit ||
-        '',
-    };
+    const patientId = String(editingPatient?.clientId || editingPatient?.id || '').trim();
+    if (!/^[a-fA-F0-9]{24}$/.test(patientId)) {
+      Alert.alert(
+        'No se puede guardar',
+        'Este paciente no tiene una cuenta vinculada para guardar los cambios en la base de datos.'
+      );
+      return;
+    }
 
-    setPatients((prev) => {
-      const idx = prev.findIndex((p) => String(p.id) === eid);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], ...patch };
-        return next;
+    isSavingPatientEdit.current = true;
+    try {
+      const token = await simpleAuthService.getToken();
+      if (!token) throw new Error('No hay sesión activa para actualizar el paciente.');
+
+      const response = await fetch(`${getBackendBaseUrl()}/api/users/${patientId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          fullName: newPatientData.fullName,
+          email: newPatientData.email,
+          phone: String(newPatientData.phone || '').replace(/[^\d+]/g, ''),
+          dateOfBirth: newPatientData.dateOfBirth,
+          gender: newPatientData.gender,
+          address: newPatientData.address,
+          emergencyContact: newPatientData.emergencyContact,
+          medicalHistory: newPatientData.medicalHistory,
+          allergies: newPatientData.allergies,
+          notes: newPatientData.notes,
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.message || `No se pudo actualizar el paciente (HTTP ${response.status}).`);
       }
-      if (editingPatient) {
-        return [...prev, { ...editingPatient, ...patch }];
-      }
-      return prev;
-    });
-    setEditingPatient(null);
-    setNewPatientData(emptyPatientForm());
-    setShowEditPatientModal(false);
-    Alert.alert('Éxito', 'Paciente actualizado correctamente');
+
+      const saved = json?.data || {};
+      const nextName = String(saved.fullName || newPatientData.fullName || '').trim();
+      const nextEmail = String(saved.email || newPatientData.email || '').trim();
+      const nextPhone = String(saved.phone || newPatientData.phone || '').trim();
+
+      setPatients((prev) =>
+        prev.map((p) => {
+          const sameId =
+            String(p.clientId || p.id || '').trim() === patientId ||
+            String(p.id || '').trim() === patientId;
+          if (!sameId) return p;
+          return {
+            ...p,
+            name: nextName || p.name,
+            email: nextEmail || p.email,
+            phone: nextPhone || p.phone,
+            dateOfBirth: newPatientData.dateOfBirth || p.dateOfBirth,
+            gender: newPatientData.gender || p.gender,
+            address: newPatientData.address || p.address,
+            emergencyContact: newPatientData.emergencyContact || p.emergencyContact,
+            medicalHistory: newPatientData.medicalHistory || p.medicalHistory,
+            allergies: newPatientData.allergies || p.allergies,
+            notes: newPatientData.notes || p.notes,
+          };
+        })
+      );
+
+      await refreshAppointments();
+      setEditingPatient(null);
+      setNewPatientData(emptyPatientForm());
+      setShowEditPatientModal(false);
+      setPatientListRevision((current) => current + 1);
+      Alert.alert('Paciente actualizado', 'Los cambios se guardaron en la base de datos.');
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'No se pudo guardar el paciente en la base de datos.'
+      );
+    } finally {
+      isSavingPatientEdit.current = false;
+    }
   };
 
   const handleCancelEditPatient = () => {
@@ -1012,6 +1132,8 @@ export default function StatsScreen() {
   const [selectedPatientForDetails, setSelectedPatientForDetails] = useState<any>(null);
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState<any>(null);
+  const isSavingPatientEdit = useRef(false);
+  const [patientListRevision, setPatientListRevision] = useState(0);
 
   // Renderizar pantalla de estadísticas para clientes
   if (!isProfessional) {
@@ -1105,238 +1227,62 @@ export default function StatsScreen() {
     );
   }
 
-  // Para profesionales, mostrar directamente la gestión de pacientes
+  // Misma Gestión de Pacientes que Configuración; los modales quedan encima.
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header de Gestión de Pacientes */}
-        <View style={styles.patientManagementHeader}>
-          <View style={styles.patientManagementHeaderContent}>
-            <Text style={[styles.patientManagementTitle, styles.androidTextFix]}>
-              🏥 Gestión de Pacientes
-            </Text>
-            <Text style={[styles.patientManagementSubtitle, styles.androidTextFix]}>
-              Administra tu lista de pacientes
-            </Text>
-            {isFreeProfessional ? (
-              <Text style={[styles.patientManagementLimitHint, styles.androidTextFix]}>
-                Plan Free: {patients.length}/{FREE_PRO_PATIENT_LIMIT} pacientes
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        {/* Panel de Estadísticas */}
-        <View style={styles.patientManagementStats}>
-          <View style={styles.patientManagementStatCard}>
-            <Text style={[styles.patientManagementStatNumber, styles.androidTextFix]}>{displayPatients.length}</Text>
-            <Text style={[styles.patientManagementStatLabel, styles.androidTextFix]}>Total</Text>
-          </View>
-          <View style={styles.patientManagementStatCard}>
-            <Text style={[styles.patientManagementStatNumber, styles.androidTextFix]}>
-              {displayPatients.filter(p => p.status === 'active').length}
-            </Text>
-            <Text style={[styles.patientManagementStatLabel, styles.androidTextFix]}>Activos</Text>
-          </View>
-          <View style={styles.patientManagementStatCard}>
-            <Text style={[styles.patientManagementStatNumber, styles.androidTextFix]}>
-              {displayPatients.filter(p => p.status === 'inactive').length}
-            </Text>
-            <Text style={[styles.patientManagementStatLabel, styles.androidTextFix]}>Inactivos</Text>
-          </View>
-          <View style={styles.patientManagementStatCard}>
-            <Text style={[styles.patientManagementStatNumber, styles.androidTextFix]}>
-              {displayPatients.filter(p => p.visits <= 1).length}
-            </Text>
-            <Text style={[styles.patientManagementStatLabel, styles.androidTextFix]}>Nuevos</Text>
-          </View>
-        </View>
-
-        {/* Barra de Acciones */}
-        <View style={styles.patientManagementActions}>
-          <TouchableOpacity 
-            style={[
-              styles.patientManagementActionButton,
-              reachedPatientLimit && styles.patientManagementActionButtonDisabled,
-            ]}
-            onPress={reachedPatientLimit ? () => router.push('/subscribe') : handleAddNewPatient}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="person-add" size={20} color={reachedPatientLimit ? '#E5E7EB' : 'white'} />
-            <Text style={[styles.patientManagementActionButtonText, styles.androidTextFix]}>
-              {reachedPatientLimit ? 'Límite alcanzado' : 'Agregar Paciente'}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.patientManagementActionButton}
-            onPress={() => Alert.alert('Info', 'Función en desarrollo - Importar Pacientes')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="download" size={20} color="white" />
-            <Text style={[styles.patientManagementActionButtonText, styles.androidTextFix]}>Importar</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.patientManagementActionButton}
-            onPress={() => Alert.alert('Info', 'Función en desarrollo - Exportar Pacientes')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="share" size={20} color="white" />
-            <Text style={[styles.patientManagementActionButtonText, styles.androidTextFix]}>Exportar</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Filtros y Búsqueda */}
-        <View style={styles.patientManagementSearchSection}>
-          <View style={styles.patientManagementSearchContainer}>
-            <Ionicons name="search" size={20} color="#667eea" style={styles.patientManagementSearchIcon} />
-            <TextInput
-              style={[styles.patientManagementSearchInput, styles.androidTextFix]}
-              placeholder="🔍 Buscar pacientes..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor="#999"
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
-          </View>
-          
-          <View style={styles.patientManagementFilters}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}>
-              <TouchableOpacity 
-                style={[styles.patientManagementFilterChip, filter === 'all' && styles.patientManagementFilterChipActive]}
-                onPress={() => setFilter('all')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.patientManagementFilterChipText, filter === 'all' && styles.patientManagementFilterChipTextActive, styles.androidTextFix]}>Todos</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.patientManagementFilterChip, filter === 'active' && styles.patientManagementFilterChipActive]}
-                onPress={() => setFilter('active')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.patientManagementFilterChipText, filter === 'active' && styles.patientManagementFilterChipTextActive, styles.androidTextFix]}>Activos</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.patientManagementFilterChip, filter === 'inactive' && styles.patientManagementFilterChipActive]}
-                onPress={() => setFilter('inactive')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.patientManagementFilterChipText, filter === 'inactive' && styles.patientManagementFilterChipTextActive, styles.androidTextFix]}>Inactivos</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.patientManagementFilterChip, filter === 'recent' && styles.patientManagementFilterChipActive]}
-                onPress={() => setFilter('recent')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.patientManagementFilterChipText, filter === 'recent' && styles.patientManagementFilterChipTextActive, styles.androidTextFix]}>Recientes</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-
-        {/* Lista de Pacientes con Acciones */}
-        <View style={styles.patientManagementList}>
-          {displayPatients
-          .filter(patient => {
-            const q = (searchQuery || '').trim().toLowerCase();
-            const phoneNorm = (patient.phone || '').replace(/\s/g, '');
-            const qPhone = q.replace(/\s/g, '');
-            const matchesSearch =
-              !q ||
-              (patient.name || '').toLowerCase().includes(q) ||
-              (patient.email || '').toLowerCase().includes(q) ||
-              (phoneNorm && qPhone && phoneNorm.includes(qPhone));
-            
-            if (filter === 'all') return matchesSearch;
-            if (filter === 'active') return matchesSearch && patient.status === 'active';
-            if (filter === 'inactive') return matchesSearch && patient.status === 'inactive';
-            if (filter === 'recent') return matchesSearch && new Date(patient.lastVisit) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-            
-            return matchesSearch;
+    <View style={styles.container}>
+      <ProfessionalPatientManagement
+        revision={patientListRevision}
+        onAdd={() => {
+          if (reachedPatientLimit) {
+            Alert.alert(
+              'Límite de pacientes en plan Free',
+              `En el plan actual podés cargar hasta ${FREE_PRO_PATIENT_LIMIT} pacientes.`,
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Ver planes', onPress: () => router.push('/subscribe') },
+              ]
+            );
+            return;
+          }
+          setShowAddPatientForm(true);
+        }}
+        onImport={() => {
+          setPatientListRevision((current) => current + 1);
+          Alert.alert('Pacientes', 'La lista se actualizó desde la base de datos.');
+        }}
+        onExport={(rows) => {
+          Alert.alert('Exportar', `Se prepararon ${rows.length} pacientes para exportar.`);
+        }}
+        onView={handleViewPatientDetails}
+        onEdit={handleEditPatient}
+        onSchedule={(patient) =>
+          router.navigate({
+            pathname: '/(tabs)',
+            params: {
+              newProfessionalAppointmentRequest: String(Date.now()),
+              patientId: String(patient.clientId || patient.id || ''),
+              patientName: patient.name,
+              patientEmail: patient.email,
+              patientPhone: patient.phone,
+            },
           })
-          .map((patient) => (
-            <View key={patient.id} style={[styles.patientManagementCard, patient.status === 'inactive' && styles.patientManagementCardInactive, styles.androidCardShadow]}>
-              {/* Header de la Tarjeta */}
-              <View style={styles.patientManagementCardHeader}>
-                <View style={styles.patientManagementCardAvatar}>
-                  <Ionicons name="person" size={24} color="white" />
-                </View>
-                <View style={styles.patientManagementCardInfo}>
-                  <Text style={[styles.patientManagementCardName, styles.androidTextFix]}>{patient.name}</Text>
-                  <Text style={[styles.patientManagementCardEmail, styles.androidTextFix]}>{patient.email}</Text>
-                  <Text style={[styles.patientManagementCardPhone, styles.androidTextFix]}>{patient.phone}</Text>
-                </View>
-                <View style={styles.patientManagementCardStatus}>
-                  <View style={[styles.patientManagementStatusBadge, patient.status === 'active' ? styles.patientManagementStatusActive : styles.patientManagementStatusInactive]}>
-                    <Text style={[styles.patientManagementStatusText, styles.androidTextFix]}>
-                      {patient.status === 'active' ? '🟢 Activo' : '🔴 Inactivo'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.patientManagementCardVisits, styles.androidTextFix]}>{patient.visits} visita{patient.visits !== 1 ? 's' : ''}</Text>
-                </View>
-              </View>
-
-              {/* Detalles del Paciente */}
-              <View style={styles.patientManagementCardDetails}>
-                <Text style={[styles.patientManagementCardNotes, styles.androidTextFix]}>
-                  <Text style={styles.patientManagementCardNotesLabel}>Notas: </Text>
-                  {patient.notes}
-                </Text>
-                <Text style={[styles.patientManagementCardLastVisit, styles.androidTextFix]}>
-                  Última visita: {patient.lastVisit}
-                </Text>
-              </View>
-
-              {/* Acciones del Paciente */}
-              <View style={styles.patientManagementCardActions}>
-                <TouchableOpacity 
-                  style={styles.patientManagementAction}
-                  onPress={() => handleViewPatientDetails(patient)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="eye" size={16} color="#667eea" />
-                  <Text style={[styles.patientManagementActionText, styles.androidTextFix]}>Ver</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.patientManagementAction}
-                  onPress={() => handleEditPatient(patient)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="create" size={16} color="#FF9800" />
-                  <Text style={[styles.patientManagementActionText, styles.androidTextFix]}>Editar</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.patientManagementAction}
-                  onPress={() => handleScheduleAppointment(patient)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="calendar" size={16} color="#4CAF50" />
-                  <Text style={[styles.patientManagementActionText, styles.androidTextFix]}>Agendar</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.patientManagementAction}
-                  onPress={() => handleViewPatientHistory(patient)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="time" size={16} color="#9C27B0" />
-                  <Text style={[styles.patientManagementActionText, styles.androidTextFix]}>Historial</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
+        }
+        onHistory={(patient) =>
+          router.navigate({
+            pathname: '/(tabs)/settings',
+            params: {
+              patientHistoryRequest: String(Date.now()),
+              patientId: String(patient.clientId || patient.id || ''),
+              patientName: patient.name,
+              patientEmail: patient.email,
+              patientPhone: patient.phone,
+              patientStatus: patient.status,
+              patientLastVisit: patient.lastVisit,
+              patientVisits: String(patient.visits || 0),
+            },
+          })
+        }
+      />
 
       {/* Modal para Agregar Nuevo Paciente */}
       <Modal
@@ -2273,7 +2219,7 @@ export default function StatsScreen() {
           </ScrollView>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -1,3 +1,5 @@
+import { getBackendBaseUrl } from '../config/backend';
+import simpleAuthService from './simpleAuthService';
 
 // Tipos para usuarios
 export interface UserProfile {
@@ -9,6 +11,12 @@ export interface UserProfile {
   isEmailVerified: boolean;
   isActive: boolean;
   profileImage?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  emergencyContact?: string;
+  medicalHistory?: string;
+  allergies?: string;
+  clinicalNotes?: string;
   address?: {
     street: string;
     city: string;
@@ -206,56 +214,133 @@ class UserService {
     return { downloadUrl: 'https://example.com/mock-export.zip' };
   }
 
-  // Obtener todos los usuarios (solo para administradores)
+  // Obtener todos los usuarios desde el backend
   async getAllUsers(): Promise<UserProfile[]> {
-    // SOLUCIÓN DEFINITIVA: NO hacer llamadas al backend, solo usar datos mock
-    console.log('📱 UserService: Obteniendo usuarios localmente (modo desarrollo)');
-    
-    // Siempre retornar datos mock locales
-    return this.getMockUsers();
+    const token = await simpleAuthService.getToken();
+    if (!token) {
+      throw new Error('No hay sesión activa');
+    }
+
+    const response = await fetch(`${getBackendBaseUrl()}/api/users?role=client&limit=100`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || !json?.success || !Array.isArray(json.data)) {
+      throw new Error(json?.message || `No se pudieron cargar usuarios (HTTP ${response.status})`);
+    }
+
+    return json.data.map((user: any) => ({
+      _id: String(user._id),
+      fullName: user.fullName || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      userType: user.userType || 'client',
+      isEmailVerified: Boolean(user.isEmailVerified),
+      isActive: user.isActive !== false,
+      profileImage: user.profileImage || undefined,
+      dateOfBirth: user.dateOfBirth || '',
+      gender: user.gender || '',
+      emergencyContact: user.emergencyContact || '',
+      medicalHistory: user.medicalHistory || '',
+      allergies: user.allergies || '',
+      clinicalNotes: user.clinicalNotes || '',
+      address: user.address || undefined,
+      preferences: user.preferences || undefined,
+      createdAt: user.createdAt || '',
+      updatedAt: user.updatedAt || '',
+    }));
   }
 
   // Buscar usuarios por nombre
   async searchUsersByName(searchTerm: string): Promise<UserProfile[]> {
-    // SOLUCIÓN DEFINITIVA: NO hacer llamadas al backend, solo usar datos mock
-    console.log('📱 UserService: Buscando usuarios localmente (modo desarrollo)');
-    
-    // Filtrar usuarios mock por término de búsqueda
-    const mockUsers = this.getMockUsers();
-    return mockUsers.filter(user => 
-      user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const all = await this.getAllUsers();
+    const term = searchTerm.toLowerCase();
+    return all.filter(
+      (user) =>
+        user.fullName.toLowerCase().includes(term) ||
+        user.email.toLowerCase().includes(term)
     );
   }
 
   // Obtener usuario por ID
   async getUserById(id: string): Promise<UserProfile | null> {
-    // SOLUCIÓN DEFINITIVA: NO hacer llamadas al backend, solo usar datos mock
-    console.log('📱 UserService: Obteniendo usuario por ID localmente (modo desarrollo)');
-    
-    // Buscar usuario mock por ID
-    const mockUsers = this.getMockUsers();
-    return mockUsers.find(user => user._id === id) || null;
+    const token = await simpleAuthService.getToken();
+    if (!token) {
+      throw new Error('No hay sesión activa');
+    }
+
+    const response = await fetch(`${getBackendBaseUrl()}/api/v1/users/${id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(json?.error || json?.message || `Usuario no encontrado (HTTP ${response.status})`);
+    }
+    const user = json?._id ? json : json?.data;
+    if (!user?._id) return null;
+
+    return {
+      _id: String(user._id),
+      fullName: user.fullName || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      userType: user.userType || 'client',
+      isEmailVerified: Boolean(user.isEmailVerified),
+      isActive: user.isActive !== false,
+      profileImage: user.profileImage || undefined,
+      dateOfBirth: user.dateOfBirth || '',
+      gender: user.gender || '',
+      emergencyContact: user.emergencyContact || '',
+      medicalHistory: user.medicalHistory || '',
+      allergies: user.allergies || '',
+      clinicalNotes: user.clinicalNotes || '',
+      address: user.address || undefined,
+      preferences: user.preferences || undefined,
+      createdAt: user.createdAt || '',
+      updatedAt: user.updatedAt || '',
+    };
   }
 
   // Obtener solo clientes
   async getClients(): Promise<UserProfile[]> {
-    // SOLUCIÓN DEFINITIVA: NO hacer llamadas al backend, solo usar datos mock
-    console.log('📱 UserService: Obteniendo clientes localmente (modo desarrollo)');
-    
-    // Filtrar solo clientes de los usuarios mock
-    const mockUsers = this.getMockUsers();
-    return mockUsers.filter(user => user.userType === 'client');
+    const all = await this.getAllUsers();
+    return all.filter((user) => user.userType === 'client');
   }
 
   // Obtener solo profesionales
   async getProfessionals(): Promise<UserProfile[]> {
-    // SOLUCIÓN DEFINITIVA: NO hacer llamadas al backend, solo usar datos mock
-    console.log('📱 UserService: Obteniendo profesionales localmente (modo desarrollo)');
-    
-    // Filtrar solo profesionales de los usuarios mock
-    const mockUsers = this.getMockUsers();
-    return mockUsers.filter(user => user.userType === 'professional');
+    const token = await simpleAuthService.getToken();
+    if (!token) {
+      throw new Error('No hay sesión activa');
+    }
+    const response = await fetch(`${getBackendBaseUrl()}/api/users?role=professional&limit=100`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || !json?.success || !Array.isArray(json.data)) {
+      throw new Error(json?.message || `No se pudieron cargar profesionales (HTTP ${response.status})`);
+    }
+    return json.data.map((user: any) => ({
+      _id: String(user._id),
+      fullName: user.fullName || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      userType: 'professional' as const,
+      isEmailVerified: Boolean(user.isEmailVerified),
+      isActive: user.isActive !== false,
+      profileImage: user.profileImage || undefined,
+      createdAt: user.createdAt || '',
+      updatedAt: user.updatedAt || '',
+    }));
   }
 
   // Función para obtener datos mock de usuarios

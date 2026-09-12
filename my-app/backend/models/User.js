@@ -23,6 +23,52 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  dateOfBirth: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  gender: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  emergencyContact: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  medicalHistory: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  allergies: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  clinicalNotes: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  /** OAuth Google: sub del id_token */
+  googleId: {
+    type: String,
+    trim: true,
+    sparse: true,
+    unique: true,
+    default: undefined,
+  },
+  /** OAuth Apple */
+  appleId: {
+    type: String,
+    trim: true,
+    sparse: true,
+    unique: true,
+    default: undefined,
+  },
   userType: {
     type: String,
     enum: ['client', 'professional', 'admin'],
@@ -31,6 +77,24 @@ const userSchema = new mongoose.Schema({
   service: {
     type: String,
     trim: true
+  },
+  /** Precio de consulta que ve el cliente al reservar (ARS). */
+  consultationPrice: {
+    type: Number,
+    default: 10000,
+    min: 0,
+  },
+  /** Porcentaje de seña sobre consultationPrice (0–100). */
+  depositPercentage: {
+    type: Number,
+    default: 20,
+    min: 0,
+    max: 100,
+  },
+  /** Si false, el cliente reserva sin seña online. Default true. */
+  clientBookingRequiresDeposit: {
+    type: Boolean,
+    default: true
   },
   isEmailVerified: {
     type: Boolean,
@@ -78,6 +142,14 @@ const userSchema = new mongoose.Schema({
         default: false
       }
     }
+  },
+  resetPasswordToken: {
+    type: String,
+    default: null
+  },
+  resetPasswordExpiresAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Modal,
@@ -45,6 +45,15 @@ const DateScheduleModal: React.FC<DateScheduleModalProps> = ({
   );
   const [isAvailable, setIsAvailable] = useState(schedule?.isAvailable ?? true);
 
+  useEffect(() => {
+    if (!visible) return;
+    setTimeSlots(
+      schedule?.timeSlots?.map((slot) => ({ ...slot })) ||
+        defaultTimeSlots.map((slot) => ({ ...slot }))
+    );
+    setIsAvailable(schedule?.isAvailable ?? true);
+  }, [visible, date]);
+
   const addTimeSlot = () => {
     setTimeSlots(prev => [...prev, { start: '09:00', end: '10:00', isCustom: true }]);
   };
@@ -60,8 +69,18 @@ const DateScheduleModal: React.FC<DateScheduleModalProps> = ({
   };
 
   const handleSave = () => {
-    if (timeSlots.length === 0) {
+    if (isAvailable && timeSlots.length === 0) {
       Alert.alert('Error', 'Debes agregar al menos un horario');
+      return;
+    }
+    const invalidSlot = timeSlots.some(
+      (slot) =>
+        !/^\d{2}:\d{2}$/.test(slot.start) ||
+        !/^\d{2}:\d{2}$/.test(slot.end) ||
+        slot.start >= slot.end
+    );
+    if (invalidSlot) {
+      Alert.alert('Error', 'Revisá los horarios: cada inicio debe ser anterior al fin.');
       return;
     }
 

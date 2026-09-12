@@ -67,7 +67,7 @@ const FullCalendar: React.FC<FullCalendarProps> = ({
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ];
 
-  const dayNames = ['Dom', 'Lun', 'Mar', 'Mi?', 'Jue', 'Vie', 'S?b'];
+  const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     const newMonth = new Date(displayMonth);

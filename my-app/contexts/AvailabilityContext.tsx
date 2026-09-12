@@ -37,6 +37,15 @@ export interface ProfessionalAvailability {
     start: string;
     end: string;
   };
+  defaultTimeRanges?: Array<{
+    start: string;
+    end: string;
+  }>;
+  appointmentDuration?: number;
+  maxAppointmentsPerDay?: number;
+  advanceBookingDays?: number;
+  replicateScopeWeeks?: number;
+  overwriteDatesWithSchedule?: boolean;
   isActive: boolean;
   blockedTimeSlots?: BlockedTimeSlot[];
   createdAt: string;
@@ -67,11 +76,15 @@ interface AvailabilityContextType {
     /** Nombres de consultorios (API GET /api/v1/professionals). */
     clinicNames?: string[];
     avatar?: string;
+    /** Path/URL de foto de perfil del profesional. */
+    profileImage?: string;
     experience?: string;
     /** Para contacto por WhatsApp (directorio API) */
     phone?: string;
     /** Si el profesional exige seña para reservas online (GET /api/v1/professionals). */
     clientBookingRequiresDeposit?: boolean;
+    /** % de seña configurado por el profesional (GET /api/v1/professionals). */
+    depositPercentage?: number;
     /** Super profesional: coincide con cualquier servicio del catálogo (API). */
     offersAllCatalogServices?: boolean;
   }>;
@@ -804,6 +817,34 @@ export const AvailabilityProvider: React.FC<AvailabilityProviderProps> = ({ chil
             start: typeof bt.start === 'string' && bt.start ? bt.start : '13:00',
             end: typeof bt.end === 'string' && bt.end ? bt.end : '14:00',
           },
+          defaultTimeRanges: Array.isArray(backendAvailability.defaultTimeRanges)
+            ? backendAvailability.defaultTimeRanges
+                .filter(
+                  (range) =>
+                    range &&
+                    typeof range.start === 'string' &&
+                    typeof range.end === 'string'
+                )
+                .map((range) => ({ start: range.start, end: range.end }))
+            : undefined,
+          appointmentDuration:
+            Number.isFinite(Number(backendAvailability.appointmentDuration))
+              ? Number(backendAvailability.appointmentDuration)
+              : 30,
+          maxAppointmentsPerDay:
+            Number.isFinite(Number(backendAvailability.maxAppointmentsPerDay))
+              ? Number(backendAvailability.maxAppointmentsPerDay)
+              : 20,
+          advanceBookingDays:
+            Number.isFinite(Number(backendAvailability.advanceBookingDays))
+              ? Number(backendAvailability.advanceBookingDays)
+              : 30,
+          replicateScopeWeeks:
+            Number.isFinite(Number(backendAvailability.replicateScopeWeeks))
+              ? Number(backendAvailability.replicateScopeWeeks)
+              : 8,
+          overwriteDatesWithSchedule:
+            backendAvailability.overwriteDatesWithSchedule === true,
           isActive: backendAvailability.isActive !== false,
           createdAt: backendAvailability.createdAt || new Date().toISOString(),
           updatedAt: backendAvailability.updatedAt || new Date().toISOString(),

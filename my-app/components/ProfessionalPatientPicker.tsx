@@ -59,20 +59,16 @@ export default function ProfessionalPatientPicker({
 
   useEffect(() => {
     if (!visible || tab !== 'search') return;
-    const t = query.trim();
-    if (t.length < 2) {
-      setSearchResults([]);
-      return;
-    }
     setLoadingSearch(true);
+    const delay = query.trim().length > 0 ? 400 : 0;
     const id = setTimeout(async () => {
       try {
-        const rows = await searchRegisteredClients(t);
+        const rows = await searchRegisteredClients(query);
         setSearchResults(rows);
       } finally {
         setLoadingSearch(false);
       }
-    }, 400);
+    }, delay);
     return () => clearTimeout(id);
   }, [visible, tab, query]);
 
@@ -91,7 +87,7 @@ export default function ProfessionalPatientPicker({
   const subtitle =
     tab === 'my'
       ? 'Clientes con los que ya tuviste citas en Turnario'
-      : 'Escribí al menos 2 letras (nombre o email de usuarios cliente)';
+      : 'Usuarios cliente registrados en la app (filtrá por nombre o email)';
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -162,13 +158,11 @@ export default function ProfessionalPatientPicker({
           </View>
         ) : (
           <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-            {tab === 'search' && query.trim().length > 0 && query.trim().length < 2 ? (
-              <Text style={styles.empty}>Escribí al menos 2 caracteres para buscar.</Text>
-            ) : displayList.length === 0 ? (
+            {displayList.length === 0 ? (
               <Text style={styles.empty}>
                 {tab === 'my'
                   ? 'Aún no hay pacientes vinculados por citas. Usá «Buscar en la app» para elegir un cliente registrado.'
-                  : 'No se encontraron usuarios con ese criterio.'}
+                  : 'No hay usuarios cliente registrados o no coinciden con tu búsqueda.'}
               </Text>
             ) : (
               displayList.map((p) => (

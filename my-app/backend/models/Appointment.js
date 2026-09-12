@@ -14,7 +14,35 @@ const appointmentSchema = new mongoose.Schema({
   serviceId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Service',
-    required: true
+    required: false,
+    default: null
+  },
+  /** Nombre del servicio (denormalizado para listados de la app) */
+  service: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  /** Nombre del profesional (denormalizado) */
+  professionalName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  patientName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  patientEmail: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  patientPhone: {
+    type: String,
+    trim: true,
+    default: ''
   },
   clinicId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -36,7 +64,16 @@ const appointmentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'],
+    enum: [
+      'pending',
+      'pending_approval',
+      'pending_payment',
+      'confirmed',
+      'completed',
+      'cancelled',
+      'no_show',
+      'rejected',
+    ],
     default: 'pending'
   },
   notes: {

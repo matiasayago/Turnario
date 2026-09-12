@@ -78,6 +78,16 @@ const professionalAvailabilitySchema = new mongoose.Schema({
     start: String,
     end: String
   },
+  defaultTimeRanges: [{
+    start: {
+      type: String,
+      required: true
+    },
+    end: {
+      type: String,
+      required: true
+    }
+  }],
   appointmentDuration: {
     type: Number,
     default: 30,
@@ -95,6 +105,16 @@ const professionalAvailabilitySchema = new mongoose.Schema({
     default: 30,
     min: 0,
     max: 365
+  },
+  replicateScopeWeeks: {
+    type: Number,
+    default: 8,
+    min: 1,
+    max: 52
+  },
+  overwriteDatesWithSchedule: {
+    type: Boolean,
+    default: false
   },
   isActive: {
     type: Boolean,

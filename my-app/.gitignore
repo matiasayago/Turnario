@@ -38,3 +38,6 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# fotos de perfil subidas en el backend local
+backend/uploads/

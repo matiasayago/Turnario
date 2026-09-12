@@ -85,24 +85,30 @@ export const MedicalConsultationItem: React.FC<MedicalConsultationItemProps> = (
         <Text style={styles.professional}>{consultation.professionalName}</Text>
       </View>
 
-      <View style={styles.contentSection}>
-        <Text style={styles.sectionTitle}>Síntomas</Text>
-        <Text style={styles.contentText}>{consultation.symptoms}</Text>
-      </View>
+      {consultation.symptoms ? (
+        <View style={styles.contentSection}>
+          <Text style={styles.sectionTitle}>Síntomas</Text>
+          <Text style={styles.contentText}>{consultation.symptoms}</Text>
+        </View>
+      ) : null}
 
-      <View style={styles.contentSection}>
-        <Text style={styles.sectionTitle}>Diagnóstico</Text>
-        <Text style={styles.contentText}>{consultation.diagnosis}</Text>
-      </View>
+      {consultation.diagnosis ? (
+        <View style={styles.contentSection}>
+          <Text style={styles.sectionTitle}>Diagnóstico</Text>
+          <Text style={styles.contentText}>{consultation.diagnosis}</Text>
+        </View>
+      ) : null}
 
-      <View style={styles.contentSection}>
-        <Text style={styles.sectionTitle}>Tratamiento</Text>
-        <Text style={styles.contentText}>{consultation.treatment}</Text>
-      </View>
+      {consultation.treatment && consultation.treatment !== '—' ? (
+        <View style={styles.contentSection}>
+          <Text style={styles.sectionTitle}>Tratamiento</Text>
+          <Text style={styles.contentText}>{consultation.treatment}</Text>
+        </View>
+      ) : null}
 
       {consultation.notes && (
         <View style={styles.contentSection}>
-          <Text style={styles.sectionTitle}>Notas</Text>
+          <Text style={styles.sectionTitle}>Notas médicas</Text>
           <Text style={styles.contentText}>{consultation.notes}</Text>
         </View>
       )}

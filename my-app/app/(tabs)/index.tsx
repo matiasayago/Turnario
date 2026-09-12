@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, type Href } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
+    Image,
     KeyboardAvoidingView,
     Linking,
     Modal,
@@ -20,8 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ProfessionalCalendar from '../../components/ProfessionalCalendar';
 import ProfessionalPatientPicker from '../../components/ProfessionalPatientPicker';
 import TimeSlotSelector from '../../components/TimeSlotSelector';
-import { getBackendBaseUrl } from '../../config/backend';
-import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingSlotsService';
+import { getBackendBaseUrl, resolveMediaUrl } from '../../config/backend';
+import { getBookableTimeSlotsForProfessionalDate, expoTimeToSlotKey } from '../../services/bookingSlotsService';
 import { createPaymentPreference, openMercadoPagoDirectly } from '../../config/mercadopago';
 import {
   getServicesByCategory,
@@ -36,6 +37,7 @@ import { useMedicalHistory } from '../../contexts/MedicalHistoryContext';
 import { historyPatientIdFromAppointment } from '../../utils/historyPatientId';
 import { useAvailability } from '../../contexts/AvailabilityContext';
 import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
+import { useNewAppointment } from '../../contexts/NewAppointmentContext';
 import { simpleAuthService } from '../../services/simpleAuthService';
 
 const BACKEND_URL = getBackendBaseUrl();
@@ -153,6 +155,14 @@ function parseAppointmentFormDateToLocal(dateStr: string): Date | null {
 }
 
 export default function DashboardScreen() {
+  const routeParams = useLocalSearchParams<{
+    newProfessionalAppointmentRequest?: string;
+    patientId?: string;
+    patientName?: string;
+    patientEmail?: string;
+    patientPhone?: string;
+  }>();
+  const processedAppointmentRequest = useRef('');
   const insets = useSafeAreaInsets();
   const modalActionPaddingBottom =
     Platform.OS === 'android'
@@ -160,9 +170,9 @@ export default function DashboardScreen() {
       : Math.max(insets.bottom + 12, 24);
   const router = useRouter();
   const { user, logout, hasProAccess } = useAuth();
-  const { appointments, addAppointment, refreshAppointments, getUpcomingAppointments, completeAppointment } =
+  const { appointments, addAppointment, refreshAppointments, getUpcomingAppointments, completeAppointment, confirmAppointment, rejectAppointment } =
     useAppointments();
-  const { recordProfessionalSession } = useMedicalHistory();
+  const { recordProfessionalSession, loadPatientHistory } = useMedicalHistory();
   const { isDateAvailable, availableProfessionals } = useAvailability();
   
   const [refreshing, setRefreshing] = useState(false);
@@ -207,9 +217,15 @@ export default function DashboardScreen() {
     }
     return CLIENT_RESERVA_TOTAL_AMOUNT;
   }, [selectedClientBookingProfessional]);
+  const clientDepositPct = useMemo(() => {
+    const p = selectedClientBookingProfessional;
+    const raw = p && typeof p.depositPercentage === 'number' ? p.depositPercentage : 20;
+    if (!Number.isFinite(raw) || raw < 0) return 20;
+    return Math.min(100, Math.round(raw));
+  }, [selectedClientBookingProfessional]);
   const clientSeniaPreviewAmount = useMemo(
-    () => Math.max(1, Math.round(consultationPriceClientBooking * 0.2)),
-    [consultationPriceClientBooking]
+    () => Math.max(1, Math.round(consultationPriceClientBooking * (clientDepositPct / 100))),
+    [consultationPriceClientBooking, clientDepositPct]
   );
   const [isCreatingAppointment, setIsCreatingAppointment] = useState(false);
   const [notificationsSent, setNotificationsSent] = useState<string[]>([]);
@@ -217,6 +233,8 @@ export default function DashboardScreen() {
   const [sessionModalAppointment, setSessionModalAppointment] = useState<Appointment | null>(null);
   const [sessionFormNotes, setSessionFormNotes] = useState('');
   const [sessionFormTreatment, setSessionFormTreatment] = useState('');
+  const [sessionModalCompletesAppointment, setSessionModalCompletesAppointment] = useState(false);
+  const [isSavingProfessionalSession, setIsSavingProfessionalSession] = useState(false);
   
   // Estados para el calendario de disponibilidad
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
@@ -258,7 +276,37 @@ export default function DashboardScreen() {
   const [isCreatingMercadoPagoPreference, setIsCreatingMercadoPagoPreference] = useState(false);
 
   const isProfessional = user?.userType === 'professional';
+
+  useEffect(() => {
+    const requestId = String(routeParams.newProfessionalAppointmentRequest || '');
+    if (
+      !isProfessional ||
+      !requestId ||
+      processedAppointmentRequest.current === requestId
+    ) {
+      return;
+    }
+    processedAppointmentRequest.current = requestId;
+    setNewProfessionalAppointment((previous) => ({
+      ...previous,
+      service: user?.service || previous.service || '',
+      patientName: String(routeParams.patientName || ''),
+      patientPhone: String(routeParams.patientPhone || ''),
+      patientEmail: String(routeParams.patientEmail || ''),
+      patientClientId: String(routeParams.patientId || ''),
+    }));
+    setShowModal(true);
+  }, [
+    isProfessional,
+    user?.service,
+    routeParams.newProfessionalAppointmentRequest,
+    routeParams.patientId,
+    routeParams.patientName,
+    routeParams.patientEmail,
+    routeParams.patientPhone,
+  ]);
   const { openReservaConSenaModal } = useReservaConSena();
+  const { shouldOpenHoyBookingForm, closeHoyBookingForm } = useNewAppointment();
 
   const loggedUserId = String(user?._id ?? user?.id ?? '').trim();
   /** Citas del paciente logueado (backend guarda clientId = ObjectId usuario). */
@@ -303,32 +351,80 @@ export default function DashboardScreen() {
   };
 
   const handleMarkAppointmentComplete = (appointmentId: string) => {
+    const appointment = appointments.find((item) => String(item.id) === String(appointmentId));
+    if (!appointment) {
+      Alert.alert('Error', 'No se encontró la cita.');
+      return;
+    }
     Alert.alert(
       'Marcar como completada',
-      '¿Confirmas que el turno ya se realizó? La cita pasará a estado completada.',
+      'Podés agregar las notas y el tratamiento de esta sesión antes de completarla.',
       [
         { text: 'No', style: 'cancel' },
         {
-          text: 'Sí, completada',
-          onPress: async () => {
-            await completeAppointment(appointmentId);
-            Alert.alert('Listo', 'La cita quedó registrada como completada.');
-          },
+          text: 'Continuar',
+          onPress: () => openProfessionalSessionModal(appointment, true),
         },
       ]
     );
+  };
+
+  const handleConfirmAppointment = (appointmentId: string) => {
+    Alert.alert('Confirmar cita', '¿Confirmás esta reserva?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Confirmar',
+        onPress: async () => {
+          try {
+            await confirmAppointment(appointmentId);
+            Alert.alert('Listo', 'La cita quedó confirmada.');
+          } catch (e) {
+            Alert.alert(
+              'Error',
+              e instanceof Error ? e.message : 'No se pudo confirmar la cita.'
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleRejectAppointment = (appointmentId: string) => {
+    Alert.alert('Rechazar cita', '¿Rechazás esta solicitud?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Rechazar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await rejectAppointment(appointmentId);
+            Alert.alert('Listo', 'La solicitud fue rechazada.');
+          } catch (e) {
+            Alert.alert(
+              'Error',
+              e instanceof Error ? e.message : 'No se pudo rechazar la cita.'
+            );
+          }
+        },
+      },
+    ]);
   };
 
   const closeProfessionalSessionModal = () => {
     setSessionModalAppointment(null);
     setSessionFormNotes('');
     setSessionFormTreatment('');
+    setSessionModalCompletesAppointment(false);
   };
 
-  const openProfessionalSessionModal = (apt: Appointment) => {
+  const openProfessionalSessionModal = (
+    apt: Appointment,
+    completeAfterSave = false
+  ) => {
     setSessionModalAppointment(apt);
     setSessionFormNotes('');
     setSessionFormTreatment('');
+    setSessionModalCompletesAppointment(completeAfterSave);
   };
 
   const handleSaveProfessionalSession = async () => {
@@ -346,18 +442,43 @@ export default function DashboardScreen() {
       Alert.alert('Error', 'No se pudo identificar al profesional.');
       return;
     }
-    await recordProfessionalSession({
-      patientId: pid,
-      professionalId: proId,
-      professionalName: user.fullName || (user as { name?: string }).name || 'Profesional',
-      serviceLabel: sessionModalAppointment.service || 'Consulta',
-      appointmentDateYmd: sessionModalAppointment.date,
-      appointmentTime: sessionModalAppointment.time,
-      appointmentId: sessionModalAppointment.id,
-      notes: sessionFormNotes,
-      treatmentSummary: sessionFormTreatment,
-    });
-    closeProfessionalSessionModal();
+    setIsSavingProfessionalSession(true);
+    try {
+      if (sessionModalCompletesAppointment) {
+        await completeAppointment(sessionModalAppointment.id, {
+          notes: sessionFormNotes,
+          treatmentSummary: sessionFormTreatment,
+        });
+        if (/^[a-fA-F0-9]{24}$/.test(pid)) {
+          await loadPatientHistory(pid);
+        }
+        Alert.alert('Listo', 'La sesión se guardó y la cita quedó completada.');
+      } else if (sessionFormNotes.trim() || sessionFormTreatment.trim()) {
+        await recordProfessionalSession({
+          patientId: pid,
+          professionalId: proId,
+          professionalName: user.fullName || (user as { name?: string }).name || 'Profesional',
+          serviceLabel: sessionModalAppointment.service || 'Consulta',
+          appointmentDateYmd: sessionModalAppointment.date,
+          appointmentTime: sessionModalAppointment.time,
+          appointmentId: sessionModalAppointment.id,
+          notes: sessionFormNotes,
+          treatmentSummary: sessionFormTreatment,
+        });
+        Alert.alert('Guardado', 'La sesión quedó registrada en el historial del paciente.');
+      } else {
+        Alert.alert('Faltan datos', 'Agregá una nota y/o tratamiento de la sesión.');
+        return;
+      }
+      closeProfessionalSessionModal();
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'No se pudo guardar la sesión.'
+      );
+    } finally {
+      setIsSavingProfessionalSession(false);
+    }
   };
 
   // Función para obtener pacientes de hoy (profesionales)
@@ -516,19 +637,20 @@ export default function DashboardScreen() {
   // Función para filtrar profesionales según el servicio seleccionado y búsqueda
   const getFilteredProfessionals = () => {
     const selectedService = newProfessionalAppointment.service;
-    
-    // Si no hay servicio seleccionado, no mostrar profesionales
-    if (!selectedService) {
+    const hasSearch = professionalSearchQuery.trim().length > 0;
+    const hasClinic = professionalClinicQuery.trim().length > 0;
+
+    // Sin servicio: permitir listar/filtrar si hay búsqueda o consultorio
+    let filtered = availableProfessionals;
+    if (selectedService?.trim()) {
+      filtered = availableProfessionals.filter((professional) =>
+        professionalOffersService(professional, selectedService, { strict: true })
+      );
+    } else if (!hasSearch && !hasClinic) {
       return [];
     }
-    
-    // Coincidencia flexible: rubro en API vs ítem del catálogo SERVICES
-    let filtered = availableProfessionals.filter((professional) =>
-      professionalOffersService(professional, selectedService, { strict: true })
-    );
 
-    // Aplicar búsqueda adicional si hay query
-    if (professionalSearchQuery.trim()) {
+    if (hasSearch) {
       const query = professionalSearchQuery.toLowerCase();
       filtered = filtered.filter(
         (professional) =>
@@ -541,7 +663,7 @@ export default function DashboardScreen() {
       );
     }
 
-    if (professionalClinicQuery.trim()) {
+    if (hasClinic) {
       const cq = professionalClinicQuery.toLowerCase().trim();
       filtered = filtered.filter((professional) => {
         const loc = (professional.location || '').toLowerCase();
@@ -715,34 +837,12 @@ export default function DashboardScreen() {
     }
   };
 
-  // Lista de servicios disponibles del sistema
-  const availableServices = SERVICES.map((service, index) => {
-    // Determinar duración y precio según el tipo de servicio
-    let duration = '45 min';
-    let price = 15000;
-    
-    if (service.includes('Consulta') || service.includes('Evaluación')) {
-      duration = '30 min';
-      price = 12000;
-    } else if (service.includes('Terapia') || service.includes('Tratamiento')) {
-      duration = '60 min';
-      price = 18000;
-    } else if (service.includes('Rehabilitación') || service.includes('Fisioterapia')) {
-      duration = '45 min';
-      price = 15000;
-    } else if (service.includes('Entrenamiento') || service.includes('Masaje')) {
-      duration = '60 min';
-      price = 20000;
-    }
-    
-    return {
-      id: (index + 1).toString(),
-      name: service,
-      description: `Servicio profesional de ${service.toLowerCase()}`,
-      duration,
-      price,
-    };
-  });
+  // Lista de servicios disponibles del sistema (precio/duración dependen del profesional)
+  const availableServices = SERVICES.map((service, index) => ({
+    id: (index + 1).toString(),
+    name: service,
+    description: `Servicio profesional de ${service.toLowerCase()}`,
+  }));
 
   // Lista de profesionales disponibles por servicio
   // availableProfessionals ahora viene del contexto
@@ -848,13 +948,13 @@ export default function DashboardScreen() {
       };
 
       console.log('📋 Cita creada:', newAppointment);
+      let appointmentDuration = 30; // Valor por defecto
 
       // 1. Guardar la cita en la base de datos
       try {
         console.log('💾 Guardando cita en la base de datos...');
         
         // Obtener la duración de la cita desde la configuración del profesional
-        let appointmentDuration = 30; // Valor por defecto
         const professionalIdForDuration = isProfessional
           ? (user?._id || user?.id || '')
           : professionalMongoId;
@@ -987,8 +1087,8 @@ export default function DashboardScreen() {
                     });
                   }
                   
-                  // Crear slot después del horario reservado (si existe espacio)
-                  const reservedEndMinutes = reservedMinutes + 30; // Asumiendo citas de 30 min
+                  // Crear slot después del bloque reservado (usa duración configurada del profesional)
+                  const reservedEndMinutes = reservedMinutes + appointmentDuration;
                   if (reservedEndMinutes < slotEndMinutes) {
                     const reservedEndHour = Math.floor(reservedEndMinutes / 60);
                     const reservedEndMin = reservedEndMinutes % 60;
@@ -1227,6 +1327,13 @@ export default function DashboardScreen() {
     console.log('🎯 useEffect - showModal cambió a:', showModal);
   }, [showModal]);
 
+  // Abrir el mismo formulario de Reservar Cita cuando lo piden Calendario / Configuración
+  useEffect(() => {
+    if (!shouldOpenHoyBookingForm || isProfessional) return;
+    setShowModal(true);
+    closeHoyBookingForm();
+  }, [shouldOpenHoyBookingForm, isProfessional, closeHoyBookingForm]);
+
   // Efecto para actualizar el nombre del profesional cuando el usuario cambie
   useEffect(() => {
     if (user?.userType === 'professional' && user?.fullName) {
@@ -1253,6 +1360,14 @@ export default function DashboardScreen() {
   useEffect(() => {
     let cancelled = false;
     const defaultTimeSlots = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '15:30', '16:00', '17:00'];
+    const blockingStatuses = new Set([
+      'pending',
+      'pending_approval',
+      'pending_payment',
+      'confirmed',
+      'completed',
+      'finished',
+    ]);
 
     (async () => {
       if (newProfessionalAppointment.date && newProfessionalAppointment.professionalName) {
@@ -1268,7 +1383,25 @@ export default function DashboardScreen() {
           }
           const ymd = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
           const slots = await getBookableTimeSlotsForProfessionalDate(selectedProfessional.id, ymd);
-          if (!cancelled) setAvailableTimeSlots(slots.length > 0 ? slots : []);
+
+          const localOccupied = new Set(
+            appointments
+              .filter((apt) => {
+                if (!blockingStatuses.has(String(apt.status))) return false;
+                const aptDate = String(apt.date || '').slice(0, 10);
+                const samePro =
+                  String(apt.professionalId || '') === String(selectedProfessional.id) ||
+                  String(apt.professional || '') === String(selectedProfessional.name);
+                return samePro && aptDate === ymd;
+              })
+              .map((apt) => expoTimeToSlotKey(String(apt.time || '')) || String(apt.time || '').trim())
+              .filter(Boolean)
+          );
+
+          const filtered = (slots.length > 0 ? slots : []).filter(
+            (s) => !localOccupied.has(expoTimeToSlotKey(s) || s)
+          );
+          if (!cancelled) setAvailableTimeSlots(filtered);
         } else if (!cancelled) {
           setAvailableTimeSlots(defaultTimeSlots);
         }
@@ -1282,7 +1415,12 @@ export default function DashboardScreen() {
     return () => {
       cancelled = true;
     };
-  }, [newProfessionalAppointment.date, newProfessionalAppointment.professionalName, availableProfessionals]);
+  }, [
+    newProfessionalAppointment.date,
+    newProfessionalAppointment.professionalName,
+    availableProfessionals,
+    appointments,
+  ]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1396,11 +1534,14 @@ export default function DashboardScreen() {
             <View style={styles.appointmentsList}>
               {upcomingAppointments.map((appointment) => {
                 const statusMeta = getDashboardStatusMeta(appointment.status);
+                const isPendingForPro =
+                  isProfessional &&
+                  (appointment.status === 'pending' ||
+                    appointment.status === 'pending_approval' ||
+                    appointment.status === 'pending_payment');
                 const canMarkComplete =
                   isProfessional &&
-                  appointment.status !== 'cancelled' &&
-                  appointment.status !== 'completed' &&
-                  appointment.status !== 'finished';
+                  appointment.status === 'confirmed';
                 const HeaderWrapper = isProfessional ? TouchableOpacity : View;
                 const headerPressProps = isProfessional
                   ? {
@@ -1457,6 +1598,26 @@ export default function DashboardScreen() {
                           >
                             <Ionicons name="clipboard" size={20} color="#fff" style={{ marginRight: 8 }} />
                             <Text style={styles.sessionHistoryButtonText}>Notas y tratamiento de la sesión</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                      {isPendingForPro ? (
+                        <View style={styles.pendingActionRow}>
+                          <TouchableOpacity
+                            style={[styles.pendingActionButton, styles.confirmAppointmentButton]}
+                            onPress={() => handleConfirmAppointment(appointment.id)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 6 }} />
+                            <Text style={styles.completeAppointmentButtonText}>Confirmar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.pendingActionButton, styles.rejectAppointmentButton]}
+                            onPress={() => handleRejectAppointment(appointment.id)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="close" size={18} color="#fff" style={{ marginRight: 6 }} />
+                            <Text style={styles.completeAppointmentButtonText}>Rechazar</Text>
                           </TouchableOpacity>
                         </View>
                       ) : null}
@@ -1723,7 +1884,7 @@ export default function DashboardScreen() {
                     selectedClientBookingProfessional.clientBookingRequiresDeposit !== false && (
                       <>
                         <View style={styles.costRow}>
-                          <Text style={styles.costLabel}>Seña (20%):</Text>
+                          <Text style={styles.costLabel}>Seña ({clientDepositPct}%):</Text>
                           <Text style={styles.costValue}>
                             ${clientSeniaPreviewAmount.toLocaleString('es-AR')}
                           </Text>
@@ -1984,10 +2145,6 @@ export default function DashboardScreen() {
                     <View style={styles.serviceInfo}>
                       <Text style={styles.serviceName}>{service.name}</Text>
                       <Text style={styles.serviceDescription}>{service.description}</Text>
-                      <View style={styles.serviceDetails}>
-                        <Text style={styles.serviceDuration}>{service.duration}</Text>
-                        <Text style={styles.servicePrice}>${service.price.toLocaleString()}</Text>
-                </View>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#666" />
               </TouchableOpacity>
@@ -2054,10 +2211,21 @@ export default function DashboardScreen() {
                       onPress={() => handleProfessionalSelect(professional)}
                     >
                       <View style={styles.professionalAvatar}>
-                        <Text style={styles.professionalInitials}>
-                          {professional.avatar}
-                 </Text>
-               </View>
+                        {resolveMediaUrl(professional.image || professional.profileImage) ? (
+                          <Image
+                            source={{
+                              uri: resolveMediaUrl(
+                                professional.image || professional.profileImage
+                              )!,
+                            }}
+                            style={styles.professionalAvatarImage}
+                          />
+                        ) : (
+                          <Text style={styles.professionalInitials}>
+                            {professional.avatar}
+                          </Text>
+                        )}
+                      </View>
                       <View style={styles.professionalInfo}>
                         <Text style={styles.professionalName}>{professional.name}</Text>
                         <Text style={styles.professionalSpecialty}>{professional.specialty}</Text>
@@ -2251,12 +2419,22 @@ export default function DashboardScreen() {
                     textAlignVertical="top"
                   />
                   <TouchableOpacity
-                    style={styles.sessionSaveButton}
+                    style={[
+                      styles.sessionSaveButton,
+                      isSavingProfessionalSession && { opacity: 0.65 },
+                    ]}
                     onPress={() => void handleSaveProfessionalSession()}
+                    disabled={isSavingProfessionalSession}
                     activeOpacity={0.9}
                   >
                     <Ionicons name="save" size={20} color="#fff" style={{ marginRight: 8 }} />
-                    <Text style={styles.sessionSaveButtonText}>Guardar en historial</Text>
+                    <Text style={styles.sessionSaveButtonText}>
+                      {isSavingProfessionalSession
+                        ? 'Guardando...'
+                        : sessionModalCompletesAppointment
+                          ? 'Guardar y completar cita'
+                          : 'Guardar en historial'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : null}
@@ -3026,22 +3204,6 @@ const styles = StyleSheet.create({
   serviceDescription: {
     fontSize: 14,
     color: '#6B7280',
-    marginBottom: 8,
-  },
-  serviceDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  serviceDuration: {
-    fontSize: 12,
-    color: '#667eea',
-    fontWeight: '500',
-  },
-  servicePrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4CAF50',
   },
 
   // Estilos para el selector de profesionales
@@ -3069,6 +3231,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+    overflow: 'hidden',
+  },
+  professionalAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   professionalInitials: {
     fontSize: 18,
@@ -3351,6 +3519,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     backgroundColor: '#2196F3',
     borderRadius: 10,
+  },
+  pendingActionRow: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 10,
+  },
+  pendingActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  confirmAppointmentButton: {
+    backgroundColor: '#4CAF50',
+  },
+  rejectAppointmentButton: {
+    backgroundColor: '#F44336',
   },
   completeAppointmentButtonText: {
     color: '#fff',

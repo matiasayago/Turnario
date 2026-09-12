@@ -25,7 +25,10 @@
         "EXPO_PUBLIC_WEBSOCKET_URL": "ws://192.168.0.11:3001",
         "EXPO_PUBLIC_SUPPORT_EMAIL": "matiasayago@gmail.com",
         "EXPO_PUBLIC_SUPPORT_PHONE": "+5491159572137",
-        "EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE": "5491159572137"
+        "EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE": "5491159572137",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "532311415611-0q5nf4ougi08fternou0h0o3slm7doel.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "tu_google_ios_client_id.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "532311415611-sklehmujchbfkgsj3tmjtklvnobu9tus.apps.googleusercontent.com"
       }
     },
     "production": {

@@ -347,11 +347,18 @@ class SimpleAuthService {
           ? (b.errors[0] as { msg: string }).msg
           : '';
       let messageFromServer =
-        (typeof b.message === 'string' && b.message) || firstValidator || `Error ${response.status}`;
-      if (errCode === 'EMAIL_EXISTS' || errCode === 'DUPLICATE_KEY') {
-        messageFromServer =
-          (typeof b.message === 'string' && b.message.trim()) ||
-          'Este correo ya est? registrado. Inici? sesi?n o us? otro email.';
+        (typeof b.message === 'string' && b.message) ||
+        firstValidator ||
+        errCode ||
+        `Error ${response.status}`;
+      if (
+        errCode === 'EMAIL_EXISTS' ||
+        errCode === 'DUPLICATE_KEY' ||
+        /ya existe|ya est.{1,3} registrado/i.test(errCode)
+      ) {
+        messageFromServer = 'Este correo ya está registrado. Iniciá sesión o usá otro email.';
+      } else if (/ya existe|ya est.{1,3} registrado/i.test(messageFromServer)) {
+        messageFromServer = 'Este correo ya está registrado. Iniciá sesión o usá otro email.';
       }
       if (typeof b.details === 'string' && b.details.trim() && !messageFromServer.includes(b.details)) {
         messageFromServer = `${messageFromServer}\n${b.details.trim()}`;

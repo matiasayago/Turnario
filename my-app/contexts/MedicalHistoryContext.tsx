@@ -1,6 +1,8 @@
 // @ts-nocheck
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
+import { getBackendBaseUrl } from '../config/backend';
+import simpleAuthService from '../services/simpleAuthService';
 import { useAuth } from './AuthContext';
 import { useMedicalAuthorization } from './MedicalAuthorizationContext';
 
@@ -148,6 +150,7 @@ interface MedicalHistoryContextType {
   addTreatmentMilestone: (treatmentId: string, milestone: Omit<TreatmentMilestone, 'id'>) => Promise<void>;
   updateMilestone: (treatmentId: string, milestoneId: string, updates: Partial<TreatmentMilestone>) => Promise<void>;
   recordProfessionalSession: (input: RecordProfessionalSessionInput) => Promise<void>;
+  loadPatientHistory: (patientId: string) => Promise<void>;
 
   // Consultas
   getConsultationsByPatient: (patientId: string, filters?: MedicalHistoryFilters) => MedicalConsultation[];
@@ -183,6 +186,74 @@ function samePatientId(
   return String(a ?? '').trim() === String(b ?? '').trim();
 }
 
+interface BackendClinicalSession {
+  _id: string;
+  patientId: string;
+  professionalId: string;
+  appointmentId: string;
+  professionalName?: string;
+  serviceLabel?: string;
+  appointmentDateYmd: string;
+  appointmentTime?: string;
+  notes?: string;
+  treatmentSummary?: string;
+  recordedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+function mapClinicalSession(session: BackendClinicalSession): {
+  consultation: MedicalConsultation;
+  treatment: Treatment | null;
+} {
+  const createdAt = new Date(session.recordedAt || session.createdAt || Date.now());
+  const updatedAt = new Date(session.updatedAt || session.recordedAt || Date.now());
+  const service = String(session.serviceLabel || 'Consulta');
+  const reference = [
+    `Sesión ${session.appointmentDateYmd}`,
+    session.appointmentTime,
+    service,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const consultation: MedicalConsultation = {
+    id: String(session._id),
+    patientId: String(session.patientId),
+    professionalId: String(session.professionalId),
+    professionalName: String(session.professionalName || 'Profesional'),
+    date: createdAt,
+    type: 'follow_up',
+    symptoms: '',
+    diagnosis: '',
+    treatment: String(session.treatmentSummary || '—'),
+    notes: [String(session.notes || '').trim(), reference].filter(Boolean).join('\n\n'),
+    status: 'completed',
+    createdAt,
+    updatedAt,
+  };
+  const summary = String(session.treatmentSummary || '').trim();
+  const treatment: Treatment | null = summary
+    ? {
+        id: `treatment_${session._id}`,
+        patientId: String(session.patientId),
+        professionalId: String(session.professionalId),
+        professionalName: String(session.professionalName || 'Profesional'),
+        consultationId: String(session._id),
+        name: `Sesión · ${service}`,
+        description: summary,
+        startDate: createdAt,
+        status: 'completed',
+        progress: 100,
+        notes: [reference],
+        milestones: [],
+        endDate: createdAt,
+        createdAt,
+        updatedAt,
+      }
+    : null;
+  return { consultation, treatment };
+}
+
 export const useMedicalHistory = () => {
   const context = useContext(MedicalHistoryContext);
   if (!context) {
@@ -199,6 +270,41 @@ export const MedicalHistoryProvider: React.FC<{ children: React.ReactNode }> = (
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  const loadPatientHistory = useCallback(async (patientId: string) => {
+    const normalizedPatientId = String(patientId || '').trim();
+    if (!/^[a-fA-F0-9]{24}$/.test(normalizedPatientId)) return;
+    const token = await simpleAuthService.getToken();
+    if (!token) throw new Error('Sesión no válida');
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `${getBackendBaseUrl()}/api/v1/medical-history/patient/${normalizedPatientId}`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+      );
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json.success || !Array.isArray(json.data)) {
+        throw new Error(json.message || 'No se pudo cargar el historial clínico');
+      }
+      const mapped = (json.data as BackendClinicalSession[]).map(mapClinicalSession);
+      const loadedConsultations = mapped.map((item) => item.consultation);
+      const loadedTreatments = mapped
+        .map((item) => item.treatment)
+        .filter(Boolean) as Treatment[];
+
+      setConsultations((previous) => [
+        ...previous.filter((item) => !samePatientId(item.patientId, normalizedPatientId)),
+        ...loadedConsultations,
+      ]);
+      setTreatments((previous) => [
+        ...previous.filter((item) => !samePatientId(item.patientId, normalizedPatientId)),
+        ...loadedTreatments,
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   // Datos de ejemplo para desarrollo
   const mockConsultations: MedicalConsultation[] = [
@@ -376,6 +482,17 @@ export const MedicalHistoryProvider: React.FC<{ children: React.ReactNode }> = (
       return;
     }
 
+    if (/^[a-fA-F0-9]{24}$/.test(uid)) {
+      setConsultations([]);
+      setDocuments([]);
+      setPrescriptions([]);
+      setTreatments([]);
+      loadPatientHistory(uid).catch((error) => {
+        console.warn('No se pudo cargar el historial clínico:', error);
+      });
+      return;
+    }
+
     setConsultations((prev) => {
       const fromMock = mockConsultations.map((c) => ({ ...c, patientId: uid }));
       const extra = prev.filter(
@@ -404,7 +521,7 @@ export const MedicalHistoryProvider: React.FC<{ children: React.ReactNode }> = (
       );
       return [...fromMock, ...extra];
     });
-  }, [user?._id, user?.id, user?.userType]);
+  }, [user?._id, user?.id, user?.userType, loadPatientHistory]);
 
   // Funciones para consultas médicas
   const createConsultation = useCallback(async (consultation: Omit<MedicalConsultation, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -576,6 +693,43 @@ export const MedicalHistoryProvider: React.FC<{ children: React.ReactNode }> = (
       Alert.alert('Faltan datos', 'Agregá notas y/o tratamiento de la sesión.');
       return;
     }
+
+    if (/^[a-fA-F0-9]{24}$/.test(String(input.appointmentId))) {
+      const token = await simpleAuthService.getToken();
+      if (!token) throw new Error('Sesión no válida');
+      const response = await fetch(`${getBackendBaseUrl()}/api/v1/medical-history/session`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          appointmentId: input.appointmentId,
+          notes: notesTrim,
+          treatmentSummary: treatTrim,
+          professionalName: input.professionalName,
+          serviceLabel: input.serviceLabel,
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json.success || !json.data) {
+        throw new Error(json.message || 'No se pudo guardar la sesión en el historial');
+      }
+      const mapped = mapClinicalSession(json.data as BackendClinicalSession);
+      setConsultations((previous) => [
+        ...previous.filter((item) => item.id !== mapped.consultation.id),
+        mapped.consultation,
+      ]);
+      setTreatments((previous) => {
+        const withoutCurrent = previous.filter(
+          (item) => item.id !== `treatment_${mapped.consultation.id}`
+        );
+        return mapped.treatment ? [...withoutCurrent, mapped.treatment] : withoutCurrent;
+      });
+      return;
+    }
+
     const now = new Date();
     const consId = `cons_${Date.now()}`;
     const s = (input.appointmentDateYmd || '').trim();
@@ -626,7 +780,6 @@ export const MedicalHistoryProvider: React.FC<{ children: React.ReactNode }> = (
       };
       setTreatments((prev) => [...prev, newTreatment]);
     }
-    Alert.alert('Guardado', 'La sesión quedó registrada en el historial del paciente.');
   }, []);
 
   // Funciones de consulta con control de acceso
@@ -918,6 +1071,7 @@ export const MedicalHistoryProvider: React.FC<{ children: React.ReactNode }> = (
     addTreatmentMilestone,
     updateMilestone,
     recordProfessionalSession,
+    loadPatientHistory,
 
     // Consultas
     getConsultationsByPatient,

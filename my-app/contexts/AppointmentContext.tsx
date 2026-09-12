@@ -61,6 +61,21 @@ function mapExpoAppointmentDoc(a: Record<string, unknown>): Appointment {
       : profRaw != null
         ? String(profRaw)
         : '';
+  let profName = '';
+  let profService = '';
+  if (profRaw && typeof profRaw === 'object' && profRaw !== null) {
+    const pr = profRaw as { fullName?: string; service?: string };
+    if (typeof pr.fullName === 'string') profName = pr.fullName;
+    if (typeof pr.service === 'string') profService = pr.service;
+  }
+
+  const serviceRaw = a.serviceId;
+  let serviceFromRef = '';
+  if (serviceRaw && typeof serviceRaw === 'object' && serviceRaw !== null) {
+    const sr = serviceRaw as { name?: string };
+    if (typeof sr.name === 'string') serviceFromRef = sr.name;
+  }
+
   const clientRaw = a.clientId;
   const clientId =
     clientRaw && typeof clientRaw === 'object' && clientRaw !== null && '_id' in clientRaw
@@ -89,21 +104,39 @@ function mapExpoAppointmentDoc(a: Record<string, unknown>): Appointment {
       ? st
       : 'confirmed'
   ) as AppointmentStatus;
+
+  const serviceName =
+    (typeof a.service === 'string' && a.service.trim()) ||
+    serviceFromRef ||
+    profService ||
+    'Servicio';
+  const professionalName =
+    (typeof a.professionalName === 'string' && a.professionalName.trim()) ||
+    (typeof a.professional === 'string' && a.professional.trim()) ||
+    profName ||
+    'Profesional';
+
   return {
     id: String(a._id),
-    service: (a.service as string) || 'Servicio',
-    professional: (a.professionalName as string) || 'Profesional',
+    service: serviceName,
+    professional: professionalName,
     professionalId: profId,
     date: String(a.date),
     time: String(a.time),
     notes: (a.notes as string) || '',
     status,
     clientId,
-    clientName: (a.patientName as string) || clientProfileName || 'Cliente',
-    patientName: (a.patientName as string) || clientProfileName || '',
-    patientEmail: (a.patientEmail as string) || clientProfileEmail || '',
-    patientPhone: (a.patientPhone as string) || clientProfilePhone || '',
-    totalAmount: typeof a.totalAmount === 'number' ? a.totalAmount : 0,
+    // Perfil poblado manda sobre campos denormalizados (evita datos viejos tras editar paciente).
+    clientName: clientProfileName || (a.patientName as string) || 'Cliente',
+    patientName: clientProfileName || (a.patientName as string) || '',
+    patientEmail: clientProfileEmail || (a.patientEmail as string) || '',
+    patientPhone: clientProfilePhone || (a.patientPhone as string) || '',
+    totalAmount:
+      typeof a.totalAmount === 'number'
+        ? a.totalAmount
+        : typeof a.price === 'number'
+          ? a.price
+          : 0,
     depositAmount: typeof a.depositAmount === 'number' ? a.depositAmount : undefined,
     paymentStatus: typeof a.paymentStatus === 'string' ? a.paymentStatus : undefined,
     createdAt: created,
@@ -156,7 +189,10 @@ interface AppointmentContextType {
   getPendingAppointments: (userId: string) => Appointment[];
   confirmAppointment: (appointmentId: string) => Promise<void>;
   rejectAppointment: (appointmentId: string) => Promise<void>;
-  completeAppointment: (appointmentId: string) => Promise<void>;
+  completeAppointment: (
+    appointmentId: string,
+    session?: { notes?: string; treatmentSummary?: string }
+  ) => Promise<void>;
   /** Paciente: cancela vía API con regla de 48 h; actualiza estado local si OK. */
   cancelAppointmentAsClient: (appointmentId: string) => Promise<{ ok: boolean; message?: string }>;
   /** Paciente: nueva fecha/hora; misma regla 48 h que cancelar; actualiza local y bloqueos de agenda. */
@@ -260,7 +296,7 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const userId = String(user?._id || user?.id || '').trim();
 
       const tryFetchList = async (path: string): Promise<Appointment[] | null> => {
-        if (!userId || userId.length !== 24 || !token) {
+        if (!userId || userId.length !== 24) {
           return null;
         }
         const url = `${getBackendBaseUrl()}${path}`;
@@ -362,11 +398,13 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
       saveAppointments(updatedAppointments);
       console.log('📅 Nueva cita agregada localmente:', newAppointment);
 
-      // Bloquear horario solo si la cita ya está confirmada (no mientras espera al profesional).
+      // Bloquear horario para cualquier cita activa (confirmada o por confirmar / pago pendiente).
+      // Si no se bloquea en pending_approval, otro cliente puede tomar el mismo turno.
       const profId = appointmentData.professionalId;
-      const waitForPro = newAppointment.status === 'pending_approval';
+      const status = String(newAppointment.status || '');
+      const shouldBlockSlot = !['cancelled', 'rejected', 'no_show'].includes(status);
       if (
-        !waitForPro &&
+        shouldBlockSlot &&
         appointmentId &&
         isMongoObjectIdString(profId)
       ) {
@@ -376,9 +414,11 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
             appointmentData.date,
             appointmentData.time,
             appointmentId,
-            'Cita programada'
+            status === 'pending_approval' || status === 'pending_payment' || status === 'pending'
+              ? 'Cita pendiente de confirmación'
+              : 'Cita programada'
           );
-          console.log('🔒 Horario bloqueado automáticamente para cita:', appointmentId);
+          console.log('🔒 Horario bloqueado automáticamente para cita:', appointmentId, status);
         } catch (blockError) {
           console.error('⚠️ Error bloqueando horario (cita creada pero horario no bloqueado):', blockError);
           // No lanzar error aquí para no afectar la creación de la cita
@@ -662,7 +702,10 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
-  const completeAppointment = async (appointmentId: string) => {
+  const completeAppointment = async (
+    appointmentId: string,
+    session?: { notes?: string; treatmentSummary?: string }
+  ) => {
     try {
       const token = await simpleAuthService.getToken();
       if (token && isMongoObjectIdString(appointmentId)) {
@@ -674,11 +717,18 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
               Authorization: `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
+            body: JSON.stringify({
+              notes: session?.notes || '',
+              treatmentSummary: session?.treatmentSummary || '',
+            }),
           }
         );
         if (!res.ok) {
-          const t = await res.text();
-          console.warn('⚠️ completeAppointment API:', res.status, t);
+          const json = await res.json().catch(() => ({}));
+          throw new Error(
+            (typeof json.message === 'string' && json.message) ||
+              `No se pudo completar la cita (${res.status})`
+          );
         }
       }
       await updateAppointmentStatus(appointmentId, 'completed');
@@ -686,6 +736,7 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
       console.log('✅ Cita marcada como completada:', appointmentId);
     } catch (error) {
       console.error('Error completing appointment:', error);
+      throw error;
     }
   };
 

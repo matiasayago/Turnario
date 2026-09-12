@@ -62,6 +62,8 @@ export default function LoginScreen() {
 
   const [isForgotPasswordLoading, setIsForgotPasswordLoading] = useState(false);
   const [forgotPasswordStep, setForgotPasswordStep] = useState<'email' | 'sent' | 'error'>('email');
+  const [forgotPasswordToken, setForgotPasswordToken] = useState('');
+  const [forgotPasswordError, setForgotPasswordError] = useState('');
 
   const handleLogin = async () => {
     Keyboard.dismiss();
@@ -97,6 +99,8 @@ export default function LoginScreen() {
 
   const handleForgotPassword = () => {
     setForgotPasswordEmail('');
+    setForgotPasswordToken('');
+    setForgotPasswordError('');
     setForgotPasswordStep('email');
     setShowForgotPasswordModal(true);
   };
@@ -115,6 +119,8 @@ export default function LoginScreen() {
     }
 
     setIsForgotPasswordLoading(true);
+    setForgotPasswordError('');
+    setForgotPasswordToken('');
 
     const url = `${getBackendBaseUrl()}/api/v1/auth/forgot-password`;
     const controller = new AbortController();
@@ -131,16 +137,29 @@ export default function LoginScreen() {
         body: JSON.stringify({ email: emailTrim }),
         signal: controller.signal,
       });
-      let body: { message?: string } = {};
+      let body: { message?: string; token?: string; error?: string; delivery?: string } = {};
       try {
-        body = (await response.json()) as { message?: string };
+        body = (await response.json()) as {
+          message?: string;
+          token?: string;
+          error?: string;
+          delivery?: string;
+        };
       } catch {
         // no-op
       }
       if (!response.ok) {
-        throw new Error(body.message || 'No pudimos enviar el email de recuperación.');
+        throw new Error(
+          body.message || body.error || 'No pudimos enviar el email de recuperación.'
+        );
       }
 
+      // Solo en desarrollo con ALLOW_LOCAL_RESET_TOKEN el backend puede devolver token
+      if (body.delivery === 'local_token' && typeof body.token === 'string' && body.token.trim()) {
+        setForgotPasswordToken(body.token.trim());
+      } else {
+        setForgotPasswordToken('');
+      }
       setForgotPasswordStep('sent');
     } catch (error) {
       console.error('💥 Error enviando email de recuperación:', error);
@@ -152,6 +171,7 @@ export default function LoginScreen() {
           message = error.message;
         }
       }
+      setForgotPasswordError(message);
       Alert.alert('Error', message);
       setForgotPasswordStep('error');
     } finally {
@@ -163,6 +183,8 @@ export default function LoginScreen() {
   const handleCloseForgotPasswordModal = () => {
     setShowForgotPasswordModal(false);
     setForgotPasswordEmail('');
+    setForgotPasswordToken('');
+    setForgotPasswordError('');
     setForgotPasswordStep('email');
     setIsForgotPasswordLoading(false);
   };
@@ -170,6 +192,8 @@ export default function LoginScreen() {
   const handleResendEmail = () => {
     setForgotPasswordStep('email');
     setForgotPasswordEmail('');
+    setForgotPasswordToken('');
+    setForgotPasswordError('');
   };
 
   const runAfterSocialConfirm = (
@@ -529,35 +553,48 @@ export default function LoginScreen() {
             {forgotPasswordStep === 'sent' && (
               <View style={styles.modalContent}>
                 <View style={styles.successIconContainer}>
-                  <Ionicons name="checkmark-circle" size={60} color="#10B981" />
+                  <Ionicons name="mail" size={60} color="#10B981" />
                 </View>
-                <Text style={styles.successTitle}>¡Email Enviado!</Text>
+                <Text style={styles.successTitle}>Revisá tu email</Text>
                 <Text style={styles.successDescription}>
-                  Hemos enviado un enlace de recuperación a{'\n'}
+                  Si existe una cuenta con{'\n'}
                   <Text style={styles.emailText}>{forgotPasswordEmail}</Text>
+                  {'\n'}te enviamos un enlace para restablecer tu contraseña.
                 </Text>
                 <Text style={styles.successInstructions}>
-                  Revisá tu bandeja de entrada y seguí las instrucciones para restablecer tu contraseña.
+                  Abrí el correo en este celular y tocá “Restablecer contraseña”. El enlace vence en 1 hora. Si no lo ves, revisá spam.
                 </Text>
+                {forgotPasswordToken ? (
+                  <>
+                    <Text style={styles.successInstructions}>
+                      Modo desarrollo (sin email): usá Continuar con el token local.
+                    </Text>
+                    <Text selectable style={styles.tokenText}>
+                      {forgotPasswordToken}
+                    </Text>
+                  </>
+                ) : null}
                 
                 <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
-                  <TouchableOpacity
-                    style={styles.secondaryButton}
-                    onPress={() => {
-                      setShowForgotPasswordModal(false);
-                      router.push({
-                        pathname: '/reset-password' as never,
-                        params: { token: '' },
-                      });
-                    }}
-                  >
-                    <Text style={styles.secondaryButtonText}>Ya tengo token</Text>
-                  </TouchableOpacity>
+                  {forgotPasswordToken ? (
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={() => {
+                        setShowForgotPasswordModal(false);
+                        router.push({
+                          pathname: '/reset-password' as never,
+                          params: { token: forgotPasswordToken },
+                        });
+                      }}
+                    >
+                      <Text style={styles.secondaryButtonText}>Continuar (dev)</Text>
+                    </TouchableOpacity>
+                  ) : null}
                   <TouchableOpacity
                     style={styles.secondaryButton}
                     onPress={handleResendEmail}
                   >
-                    <Text style={styles.secondaryButtonText}>Reenviar Email</Text>
+                    <Text style={styles.secondaryButtonText}>Reenviar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.primaryButton}
@@ -576,7 +613,8 @@ export default function LoginScreen() {
                 </View>
                 <Text style={styles.errorTitle}>Error al Enviar</Text>
                 <Text style={styles.errorDescription}>
-                  No pudimos enviar el email de recuperación. Por favor, verifica tu email e intenta nuevamente.
+                  {forgotPasswordError ||
+                    'No pudimos enviar el email de recuperación. Por favor, verifica tu email e intenta nuevamente.'}
                 </Text>
                 
                 <View style={[styles.modalActions, { paddingBottom: modalActionPaddingBottom }]}>
@@ -964,11 +1002,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  tokenText: {
+    fontSize: 12,
+    color: '#111',
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
   successInstructions: {
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
     lineHeight: 20,
   },
   errorIconContainer: {

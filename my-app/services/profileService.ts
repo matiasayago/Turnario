@@ -209,6 +209,14 @@ function mapDocToUser(u: Record<string, unknown>, mergeBase?: User | null): User
         : u.clientBookingRequiresDeposit === true
           ? true
           : undefined,
+    consultationPrice: (() => {
+      const n = Number(u.consultationPrice);
+      return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
+    })(),
+    depositPercentage: (() => {
+      const n = Number(u.depositPercentage);
+      return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n) : undefined;
+    })(),
     service: u.service != null ? String(u.service) : undefined,
     isActive: st ? st.isActive !== false : true,
     isEmailVerified: st ? !!st.emailVerified : !!u.isEmailVerified,

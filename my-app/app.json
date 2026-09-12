@@ -21,7 +21,23 @@
         "backgroundColor": "#6366E1"
       },
       "edgeToEdgeEnabled": true,
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            {
+              "scheme": "myapp",
+              "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "myapp",
+              "host": "reset-password"
+            }
+          ]
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -30,6 +46,13 @@
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Turnario necesita acceso a tus fotos para la foto de perfil.",
+          "cameraPermission": "Turnario necesita la cámara para la foto de perfil."
+        }
+      ],
       [
         "expo-splash-screen",
         {

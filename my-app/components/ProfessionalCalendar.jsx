@@ -262,6 +262,17 @@ const ProfessionalCalendar = ({
         })()
       });
     }
+
+    // Completar la última semana con días del mes siguiente (mantiene 7 columnas alineadas)
+    const trailing = (7 - (days.length % 7)) % 7;
+    for (let i = 1; i <= trailing; i++) {
+      days.push({
+        day: i,
+        isCurrentMonth: false,
+        isAvailable: false,
+        date: new Date(year, month + 1, i),
+      });
+    }
     
     return days;
   };
@@ -305,6 +316,10 @@ const ProfessionalCalendar = ({
   };
 
   const calendarDays = getDaysInMonth(currentMonth);
+  const calendarWeeks = [];
+  for (let i = 0; i < calendarDays.length; i += 7) {
+    calendarWeeks.push(calendarDays.slice(i, i + 7));
+  }
 
   // Contar fechas disponibles
   const availableCount = calendarDays.filter(day => day.isCurrentMonth && day.isAvailable).length;
@@ -386,47 +401,53 @@ const ProfessionalCalendar = ({
           </View>
         </View>
 
-        {/* Días de la semana */}
-        <View style={styles.weekDays}>
-          {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day, index) => (
-            <Text key={index} style={styles.weekDayText}>{day}</Text>
-          ))}
-        </View>
-
-        {/* Calendario */}
-        <ScrollView style={styles.calendarContainer}>
-          <View style={styles.calendarGrid}>
-            {calendarDays.map((dayObj, index) => (
-              <TouchableOpacity
-                key={`day-${dayObj.day}-${index}`}
-                style={[
-                  styles.dayButton,
-                  !dayObj.isCurrentMonth && styles.dayButtonOtherMonth,
-                  !dayObj.isAvailable && styles.dayButtonUnavailable,
-                  dayObj.isAvailable && styles.dayButtonAvailable,
-                  dayObj.isToday && styles.dayButtonToday,
-                  dayObj.isSelected && styles.dayButtonSelected
-                ]}
-                onPress={() => handleDateSelect(dayObj)}
-                disabled={!dayObj.isAvailable}
-              >
-                <Text style={[
-                  styles.dayText,
-                  !dayObj.isCurrentMonth && styles.dayTextOtherMonth,
-                  !dayObj.isAvailable && styles.dayTextUnavailable,
-                  dayObj.isAvailable && styles.dayTextAvailable,
-                  dayObj.isToday && styles.dayTextToday,
-                  dayObj.isSelected && styles.dayTextSelected
-                ]}>
-                  {dayObj.day}
-                </Text>
-                {dayObj.isAvailable && (
-                  <View style={styles.availableDot} />
-                )}
-              </TouchableOpacity>
+        {/* Días de la semana + grilla (mismo padding para alinear columnas) */}
+        <View style={styles.calendarSection}>
+          <View style={styles.weekDays}>
+            {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day, index) => (
+              <View key={index} style={styles.weekDayCell}>
+                <Text style={styles.weekDayText}>{day}</Text>
+              </View>
             ))}
           </View>
-        </ScrollView>
+
+          <ScrollView style={styles.calendarContainer} contentContainerStyle={styles.calendarContent}>
+            {calendarWeeks.map((week, weekIndex) => (
+              <View key={`week-${weekIndex}`} style={styles.weekRow}>
+                {week.map((dayObj, dayIndex) => (
+                  <View key={`day-${weekIndex}-${dayIndex}`} style={styles.dayCell}>
+                    <TouchableOpacity
+                      style={[
+                        styles.dayButton,
+                        !dayObj.isCurrentMonth && styles.dayButtonOtherMonth,
+                        !dayObj.isAvailable && styles.dayButtonUnavailable,
+                        dayObj.isAvailable && styles.dayButtonAvailable,
+                        dayObj.isToday && styles.dayButtonToday,
+                        dayObj.isSelected && styles.dayButtonSelected,
+                      ]}
+                      onPress={() => handleDateSelect(dayObj)}
+                      disabled={!dayObj.isAvailable}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          !dayObj.isCurrentMonth && styles.dayTextOtherMonth,
+                          !dayObj.isAvailable && styles.dayTextUnavailable,
+                          dayObj.isAvailable && styles.dayTextAvailable,
+                          dayObj.isToday && styles.dayTextToday,
+                          dayObj.isSelected && styles.dayTextSelected,
+                        ]}
+                      >
+                        {dayObj.day}
+                      </Text>
+                      {dayObj.isAvailable ? <View style={styles.availableDot} /> : null}
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* Información de disponibilidad */}
         <View style={styles.infoSection}>
@@ -521,35 +542,51 @@ const styles = StyleSheet.create({
   },
   weekDays: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 15,
+    width: '100%',
+    paddingVertical: 12,
     backgroundColor: '#f8f9fa',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  weekDayCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   weekDayText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#666',
-    width: 40,
     textAlign: 'center',
+  },
+  calendarSection: {
+    flex: 1,
+    paddingHorizontal: 12,
   },
   calendarContainer: {
     flex: 1,
-    padding: 20,
   },
-  calendarGrid: {
+  calendarContent: {
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  weekRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  dayCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dayButton: {
-    width: 45,
-    height: 45,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 5,
-    borderRadius: 22,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     position: 'relative',

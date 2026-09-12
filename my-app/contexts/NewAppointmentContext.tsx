@@ -4,6 +4,10 @@ interface NewAppointmentContextType {
   shouldOpenNewAppointmentModal: boolean;
   openNewAppointmentModal: () => void;
   closeNewAppointmentModal: () => void;
+  /** Cliente: abrir el formulario de Reservar Cita de la pestaña Hoy */
+  shouldOpenHoyBookingForm: boolean;
+  openHoyBookingForm: () => void;
+  closeHoyBookingForm: () => void;
 }
 
 const NewAppointmentContext = createContext<NewAppointmentContextType | undefined>(undefined);
@@ -22,17 +26,22 @@ interface NewAppointmentProviderProps {
 
 export const NewAppointmentProvider: React.FC<NewAppointmentProviderProps> = ({ children }) => {
   const [shouldOpenNewAppointmentModal, setShouldOpenNewAppointmentModal] = useState(false);
+  const [shouldOpenHoyBookingForm, setShouldOpenHoyBookingForm] = useState(false);
 
   const openNewAppointmentModal = () => {
-    console.log('🎯 NewAppointmentContext: openNewAppointmentModal() ejecutado');
-    console.log('🎯 NewAppointmentContext: Cambiando shouldOpenNewAppointmentModal a true');
     setShouldOpenNewAppointmentModal(true);
-    console.log('🎯 NewAppointmentContext: shouldOpenNewAppointmentModal configurado a true');
   };
 
   const closeNewAppointmentModal = () => {
-    console.log('🎯 NewAppointmentContext: closeNewAppointmentModal() ejecutado');
     setShouldOpenNewAppointmentModal(false);
+  };
+
+  const openHoyBookingForm = () => {
+    setShouldOpenHoyBookingForm(true);
+  };
+
+  const closeHoyBookingForm = () => {
+    setShouldOpenHoyBookingForm(false);
   };
 
   return (
@@ -41,6 +50,9 @@ export const NewAppointmentProvider: React.FC<NewAppointmentProviderProps> = ({ 
         shouldOpenNewAppointmentModal,
         openNewAppointmentModal,
         closeNewAppointmentModal,
+        shouldOpenHoyBookingForm,
+        openHoyBookingForm,
+        closeHoyBookingForm,
       }}
     >
       {children}
