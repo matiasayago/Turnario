@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -481,7 +481,7 @@ function SettingsScreen() {
   
   // Estados para el modal de configuración de notificaciones
   const [showNotificationSettingsModal, setShowNotificationSettingsModal] = useState(false);
-  const { settings, updateSettings, resetToDefaults } = useNotificationSettings();
+  const { settings, updateSettings, resetToDefaults, enableDeviceNotifications } = useNotificationSettings();
   const notificationsUiState = {
     appointments:
       settings.appointmentRequests ||
@@ -4596,6 +4596,24 @@ function SettingsScreen() {
             </View>
 
             <ScrollView style={styles.modalContent}>
+              <View style={styles.formSection}>
+                <Text style={styles.formLabel}>Notificaciones del dispositivo</Text>
+                <TouchableOpacity
+                  style={[styles.switchOption, { backgroundColor: '#EEF2FF', borderRadius: 12, padding: 12 }]}
+                  onPress={async () => {
+                    const ok = await enableDeviceNotifications();
+                    Alert.alert(
+                      ok ? 'Listo' : 'Permiso requerido',
+                      ok
+                        ? 'Las notificaciones push del celular quedaron activadas para Turnario.'
+                        : 'Activá las notificaciones de Turnario en Ajustes del teléfono e intentá de nuevo.'
+                    );
+                  }}
+                >
+                  <Text style={styles.switchText}>Activar notificaciones del celular</Text>
+                  <Ionicons name="phone-portrait-outline" size={22} color="#667eea" />
+                </TouchableOpacity>
+              </View>
               <View style={styles.formSection}>
                 <Text style={styles.formLabel}>Tipos de Notificaciones</Text>
                 <TouchableOpacity

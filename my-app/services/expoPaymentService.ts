@@ -15,9 +15,15 @@ function parsePaymentErrorBody(json: Record<string, unknown>, status: number): s
     if (m.trim()) {
       const path = (err as { path?: string }).path;
       return typeof path === 'string'
-        ? `${m} (${path}). Levantá el API de la carpeta TurnarioApp/backend con npm start (no my-app/backend). Reiniciá el servidor tras actualizar.`
+        ? `${m} (${path}). Reiniciá my-app/backend tras actualizar y revisá MERCADOPAGO_ACCESS_TOKEN.`
         : m;
     }
+  }
+  if (status === 404 || status === 503) {
+    return (
+      (typeof top === 'string' && top.trim()) ||
+      `Pagos no disponibles (HTTP ${status}). Revisá MERCADOPAGO_ACCESS_TOKEN en el backend y reiniciá el servidor.`
+    );
   }
   return `Error ${status}`;
 }

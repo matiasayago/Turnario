@@ -7,7 +7,7 @@ const WebSocket = require('ws');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Importar configuración de base de datos
 const connectDB = require('./config/database');
@@ -22,14 +22,27 @@ const Review = require('./models/Review');
 const ProfessionalAvailability = require('./models/ProfessionalAvailability');
 const ProfessionalDateSchedule = require('./models/ProfessionalDateSchedule');
 const ClinicalSession = require('./models/ClinicalSession');
+const ExpoNotification = require('./models/ExpoNotification');
 const emailService = require('./services/emailService');
+const { runAppointment24hReminders } = require('./services/appointment24hReminderJob');
+const { verifyAppleIdentityToken } = require('./services/appleAuth');
+const { MercadoPagoDepositService } = require('./services/mercadopagoDepositService');
+const { parseAppointmentStartMs } = require('./utils/appointmentTime');
+
+const CLIENT_CANCEL_MIN_HOURS_MS = 48 * 60 * 60 * 1000;
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const HOST_IP = process.env.HOST_IP || '192.168.0.11';
+const mpDepositService = new MercadoPagoDepositService();
 
 // Conectar a MongoDB
 connectDB();
+
+// Detrás de Railway / Nginx / Cloudflare
+if (process.env.TRUST_PROXY === '1' || process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // Middleware
 app.use(cors());
@@ -486,6 +499,7 @@ function publicUserPayload(user) {
     isEmailVerified: user.isEmailVerified,
     clientBookingRequiresDeposit: user.clientBookingRequiresDeposit !== false,
     googleId: user.googleId || undefined,
+    appleId: user.appleId || undefined,
     address: user.address,
     preferences: user.preferences,
     createdAt: user.createdAt,
@@ -597,6 +611,168 @@ app.post('/api/v1/auth/google', async (req, res) => {
       return res.status(409).json({
         success: false,
         message: 'Ese email o cuenta de Google ya está registrado.',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: 'INTERNAL_ERROR',
+    });
+  }
+});
+
+// Apple: ¿ya existe cuenta con este appleId o email?
+app.post('/api/v1/auth/apple/check', async (req, res) => {
+  try {
+    const identityToken = String(req.body?.identityToken || '').trim();
+    const appleUserIdBody = String(req.body?.appleUserId || '').trim();
+    let appleUserId = appleUserIdBody;
+    let email = String(req.body?.email || '').trim().toLowerCase();
+
+    if (identityToken) {
+      try {
+        const verified = await verifyAppleIdentityToken(identityToken);
+        appleUserId = verified.appleUserId;
+        if (verified.email) email = verified.email;
+      } catch (e) {
+        return res.status(e.status || 401).json({
+          success: false,
+          message: e.message || 'Token de Apple inválido.',
+        });
+      }
+    }
+
+    if (!appleUserId) {
+      return res.status(400).json({ success: false, message: 'Apple ID es requerido.' });
+    }
+
+    const query = [{ appleId: appleUserId }];
+    if (email && email.includes('@')) query.push({ email });
+    const user = await User.findOne({ $or: query }).select('_id').lean();
+    return res.json({ success: true, exists: Boolean(user) });
+  } catch (error) {
+    console.error('Error en apple/check:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+});
+
+// Apple: login / registro (Sign in with Apple)
+app.post('/api/v1/auth/apple', async (req, res) => {
+  try {
+    const identityToken = String(req.body?.identityToken || '').trim();
+    const appleUserIdBody = String(req.body?.appleUserId || '').trim();
+    const fullNameBody = String(req.body?.fullName || '').trim();
+    const emailBody = String(req.body?.email || '').trim().toLowerCase();
+    const incomingUserType = req.body?.userType === 'professional' ? 'professional' : 'client';
+
+    if (!identityToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere el identityToken de Sign in with Apple.',
+      });
+    }
+
+    let appleUserId = appleUserIdBody;
+    let emailFromToken = null;
+
+    try {
+      const verified = await verifyAppleIdentityToken(identityToken);
+      appleUserId = verified.appleUserId;
+      emailFromToken = verified.email;
+    } catch (e) {
+      return res.status(e.status || 401).json({
+        success: false,
+        message: e.message || 'Token de Apple inválido.',
+      });
+    }
+
+    if (!appleUserId) {
+      return res.status(400).json({ success: false, message: 'Apple ID es requerido.' });
+    }
+
+    // Email: token (preferido) → body (solo 1ª autorización) → sintético estable
+    let email = emailFromToken || (emailBody.includes('@') ? emailBody : '');
+    if (!email) {
+      const safeSub = appleUserId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || 'user';
+      email = `apple.${safeSub}@privaterelay.turnario.app`;
+    }
+
+    const fullName =
+      (fullNameBody.length >= 2 ? fullNameBody : '') ||
+      (email.startsWith('apple.') ? 'Usuario Apple' : email.split('@')[0]) ||
+      'Usuario Apple';
+
+    let user = await User.findOne({
+      $or: [{ appleId: appleUserId }, { email }],
+    });
+
+    if (user) {
+      if (!user.appleId) {
+        user.appleId = appleUserId;
+      }
+      if (!user.isEmailVerified) {
+        user.isEmailVerified = true;
+      }
+      // Actualizar nombre solo si Apple envió uno real y el actual es genérico
+      if (
+        fullNameBody.length >= 2 &&
+        (!user.fullName ||
+          user.fullName === 'Usuario Apple' ||
+          user.fullName === 'Usuario Google')
+      ) {
+        user.fullName = fullNameBody;
+      }
+      await user.save();
+    } else {
+      const randomPassword = `Ap${crypto.randomBytes(18).toString('hex')}!aA1`;
+      user = new User({
+        appleId: appleUserId,
+        email,
+        fullName,
+        userType: incomingUserType,
+        phone: '',
+        password: randomPassword,
+        isEmailVerified: true,
+        isActive: true,
+      });
+      await user.save();
+      console.log('✅ Usuario creado vía Apple:', email, incomingUserType);
+    }
+
+    if (user.isActive === false) {
+      return res.status(401).json({
+        success: false,
+        message: 'Cuenta desactivada',
+        error: 'ACCOUNT_DISABLED',
+      });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, userType: user.userType },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Login con Apple exitoso',
+      user: publicUserPayload(user),
+      token,
+      refreshToken: token,
+      expiresIn: 86400,
+      data: {
+        user: publicUserPayload(user),
+        token,
+        refreshToken: token,
+        expiresIn: 86400,
+      },
+    });
+  } catch (error) {
+    console.error('Error en login con Apple:', error);
+    if (error && error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ese email o cuenta de Apple ya está registrado.',
       });
     }
     return res.status(500).json({
@@ -1066,7 +1242,18 @@ app.put('/api/users/profile/me', authenticateToken, async (req, res) => {
     if (body.email !== undefined) updateData.email = String(body.email).trim().toLowerCase();
     if (body.service !== undefined) updateData.service = String(body.service).trim();
     if (body.address !== undefined) updateData.address = body.address;
-    if (body.preferences !== undefined) updateData.preferences = body.preferences;
+    if (body.preferences !== undefined) {
+      const incoming = body.preferences || {};
+      const current = user.preferences?.toObject?.() || user.preferences || {};
+      updateData.preferences = {
+        ...current,
+        ...incoming,
+        notifications: {
+          ...(current.notifications || {}),
+          ...(incoming.notifications || {}),
+        },
+      };
+    }
     if (body.profileBio !== undefined) updateData.profileBio = body.profileBio;
     if (Object.prototype.hasOwnProperty.call(body, 'clientBookingRequiresDeposit')) {
       if (user.userType !== 'professional' && user.userType !== 'admin') {
@@ -1597,9 +1784,11 @@ app.post('/api/v1/appointments/create', async (req, res) => {
     
     // 2. Obtener professionalId
     let professionalId = req.body.professionalId;
+    const professionalSelect =
+      'fullName service clientBookingRequiresDeposit consultationPrice depositPercentage';
     let professionalDoc = null;
     if (professionalId && mongoose.Types.ObjectId.isValid(professionalId)) {
-      professionalDoc = await User.findById(professionalId).select('fullName service');
+      professionalDoc = await User.findById(professionalId).select(professionalSelect);
     }
     if (
       professionalId &&
@@ -1609,10 +1798,10 @@ app.post('/api/v1/appointments/create', async (req, res) => {
       professionalDoc = await User.findOne({
         _id: new mongoose.Types.ObjectId(professionalId),
         userType: 'professional',
-      }).select('fullName service');
+      }).select(professionalSelect);
     }
     if (!professionalId || !mongoose.Types.ObjectId.isValid(professionalId)) {
-      professionalDoc = await User.findOne({ userType: 'professional' }).select('fullName service');
+      professionalDoc = await User.findOne({ userType: 'professional' }).select(professionalSelect);
       professionalId = professionalDoc ? professionalDoc._id : null;
       console.log('⚠️ Usando profesional por defecto:', professionalId);
     }
@@ -1696,6 +1885,50 @@ app.post('/api/v1/appointments/create', async (req, res) => {
       }
     }
     
+    const bookingSource = String(req.body.bookingSource || '').toLowerCase();
+    const requestedStatus = String(req.body.status || '').trim();
+    const bodyRequireDeposit =
+      req.body.requireDeposit === true ||
+      req.body.requireDeposit === 'true' ||
+      req.body.depositRequired === true ||
+      req.body.depositRequired === 'true';
+    const proRequiresDeposit =
+      !!professionalDoc && professionalDoc.clientBookingRequiresDeposit !== false;
+    const isClientBookingRequest =
+      bookingSource === 'client' ||
+      requestedStatus === 'pending_approval' ||
+      requestedStatus === 'pending_payment';
+
+    let resolvedStatus = requestedStatus || 'confirmed';
+    let resolvedDeposit =
+      typeof req.body.depositAmount === 'number' && req.body.depositAmount > 0
+        ? req.body.depositAmount
+        : Number(req.body.depositAmount) > 0
+          ? Number(req.body.depositAmount)
+          : 0;
+
+    // Cliente + seña: forzar pending_payment aunque el app mande pending_approval
+    if (
+      isClientBookingRequest &&
+      (bodyRequireDeposit ||
+        requestedStatus === 'pending_payment' ||
+        (bookingSource === 'client' && proRequiresDeposit))
+    ) {
+      resolvedStatus = 'pending_payment';
+      if (!(resolvedDeposit > 0) && professionalDoc) {
+        const base =
+          Number(professionalDoc.consultationPrice) > 0
+            ? Math.round(Number(professionalDoc.consultationPrice))
+            : Number(req.body.totalAmount) > 0
+              ? Math.round(Number(req.body.totalAmount))
+              : 10000;
+        const rawPct = Number(professionalDoc.depositPercentage);
+        const pct =
+          Number.isFinite(rawPct) && rawPct >= 0 && rawPct <= 100 ? Math.round(rawPct) : 20;
+        resolvedDeposit = Math.max(1, Math.round(base * (pct / 100)));
+      }
+    }
+
     const appointmentData = {
       clientId: new mongoose.Types.ObjectId(clientId),
       professionalId: new mongoose.Types.ObjectId(professionalId),
@@ -1706,10 +1939,14 @@ app.post('/api/v1/appointments/create', async (req, res) => {
       date: dateYmd || req.body.date,
       time: timeKey || req.body.time,
       duration: newDuration,
-      status: req.body.status || 'confirmed',
+      status: resolvedStatus,
       notes: req.body.notes || '',
       price: req.body.totalAmount || 10000,
-      paymentStatus: req.body.paymentStatus || 'pending',
+      depositAmount: resolvedDeposit > 0 ? resolvedDeposit : 0,
+      paymentStatus:
+        resolvedStatus === 'pending_payment'
+          ? 'pending'
+          : req.body.paymentStatus || 'pending',
       service: serviceName || '',
       professionalName: professionalName || '',
       patientName: String(req.body.patientName || '').trim(),
@@ -1721,6 +1958,82 @@ app.post('/api/v1/appointments/create', async (req, res) => {
     const newAppointment = new Appointment(appointmentData);
     await newAppointment.save();
     console.log('✅ Cita guardada en la base de datos con ID:', newAppointment._id);
+
+    // Notificar al profesional cuando el cliente solicita (confirmar/rechazar)
+    const isClientBooking =
+      bookingSource === 'client' ||
+      ['pending_approval', 'pending_payment'].includes(String(appointmentData.status));
+    if (isClientBooking) {
+      try {
+        const clientUser = await User.findById(clientId).select('fullName').lean();
+        const clientName =
+          appointmentData.patientName ||
+          (clientUser && clientUser.fullName) ||
+          'Cliente';
+        const svcLabel = appointmentData.service || 'turno';
+        const dateStr = String(appointmentData.date || '').slice(0, 10);
+        const timeStr = String(appointmentData.time || '');
+        const requireDeposit = String(appointmentData.status) === 'pending_payment';
+        await ExpoNotification.create({
+          recipientId: professionalId,
+          senderId: clientId,
+          type: 'appointment_request',
+          title: requireDeposit
+            ? 'Reserva con seña pendiente de pago'
+            : 'Nueva solicitud de cita',
+          message: requireDeposit
+            ? `${clientName} reservó "${svcLabel}" el ${dateStr} a las ${timeStr} con seña pendiente.`
+            : `${clientName} solicita "${svcLabel}" el ${dateStr} a las ${timeStr}. Confirmá o rechazá en Notificaciones.`,
+          data: {
+            appointmentId: String(newAppointment._id),
+            service: svcLabel,
+            date: dateStr,
+            time: timeStr,
+            patientName: clientName,
+            notes: appointmentData.notes || '',
+            professionalId: String(professionalId),
+            clientId: String(clientId),
+          },
+        });
+        console.log('🔔 Notificación appointment_request enviada al profesional');
+      } catch (notifyErr) {
+        console.warn('No se pudo notificar solicitud al profesional:', notifyErr?.message || notifyErr);
+      }
+
+      // Si requiere seña, avisar al cliente para abrir Mercado Pago
+      if (String(appointmentData.status) === 'pending_payment' && clientId) {
+        try {
+          const dep = Number(appointmentData.depositAmount) || 0;
+          const svcLabel = appointmentData.service || 'turno';
+          const dateStr = String(appointmentData.date || '').slice(0, 10);
+          const timeStr = String(appointmentData.time || '');
+          const profName = appointmentData.professionalName || 'tu profesional';
+          await ExpoNotification.create({
+            recipientId: clientId,
+            senderId: professionalId,
+            type: 'payment_required',
+            title: 'Pago de seña requerido',
+            message:
+              dep > 0
+                ? `Completá el pago de la seña de $${dep} para "${svcLabel}" el ${dateStr} a las ${timeStr} con ${profName}.`
+                : `Completá el pago de la seña para "${svcLabel}" el ${dateStr} a las ${timeStr} con ${profName}.`,
+            data: {
+              appointmentId: String(newAppointment._id),
+              depositAmount: String(dep),
+              service: svcLabel,
+              date: dateStr,
+              time: timeStr,
+              professionalName: profName,
+              professionalId: String(professionalId),
+              clientId: String(clientId),
+            },
+          });
+          console.log('🔔 Notificación payment_required enviada al cliente');
+        } catch (payNotifyErr) {
+          console.warn('No se pudo notificar seña al cliente:', payNotifyErr?.message || payNotifyErr);
+        }
+      }
+    }
 
     const populated = await Appointment.findById(newAppointment._id)
       .populate('clientId', 'fullName email phone')
@@ -1808,6 +2121,32 @@ app.patch('/api/v1/appointments/expo/:appointmentId/confirm', authenticateToken,
     doc.status = 'confirmed';
     await doc.save();
     console.log('✅ Cita confirmada:', appointmentId);
+
+    if (doc.clientId) {
+      try {
+        const prof = await User.findById(req.user.userId || req.user._id).select('fullName').lean();
+        const name = prof?.fullName || 'Profesional';
+        await ExpoNotification.create({
+          recipientId: doc.clientId,
+          senderId: req.user.userId || req.user._id,
+          type: 'appointment_confirmed',
+          title: 'Cita confirmada',
+          message: `${name} confirmó tu cita del ${doc.date} a las ${doc.time}.`,
+          data: {
+            appointmentId: String(doc._id),
+            service: doc.service || '',
+            date: String(doc.date || ''),
+            time: String(doc.time || ''),
+            professionalName: name,
+            professionalId: String(doc.professionalId),
+            clientId: String(doc.clientId),
+          },
+        });
+      } catch (e) {
+        console.warn('Notificación confirmación cliente:', e?.message || e);
+      }
+    }
+
     return res.json({ success: true, data: doc });
   } catch (error) {
     console.error('PATCH confirm appointment:', error);
@@ -1899,12 +2238,434 @@ app.patch('/api/v1/appointments/expo/:appointmentId/reject', authenticateToken, 
     doc.status = 'cancelled';
     await doc.save();
     console.log('❌ Cita rechazada:', appointmentId);
+
+    if (doc.clientId) {
+      try {
+        const prof = await User.findById(req.user.userId || req.user._id).select('fullName').lean();
+        const name = prof?.fullName || 'Profesional';
+        await ExpoNotification.create({
+          recipientId: doc.clientId,
+          senderId: req.user.userId || req.user._id,
+          type: 'appointment_cancelled',
+          title: 'Cita no disponible',
+          message: `${name} no pudo confirmar tu solicitud del ${doc.date} a las ${doc.time}.`,
+          data: {
+            appointmentId: String(doc._id),
+            service: doc.service || '',
+            date: String(doc.date || ''),
+            time: String(doc.time || ''),
+            professionalName: name,
+            professionalId: String(doc.professionalId),
+            clientId: String(doc.clientId),
+          },
+        });
+      } catch (e) {
+        console.warn('Notificación rechazo cliente:', e?.message || e);
+      }
+    }
+
     return res.json({ success: true, data: doc });
   } catch (error) {
     console.error('PATCH reject appointment:', error);
     return res.status(500).json({ success: false, message: error.message || 'Error' });
   }
 });
+
+/** Cancelación por el paciente: solo con al menos 48 h de anticipación. */
+app.patch(
+  '/api/v1/appointments/expo/:appointmentId/cancel-by-client',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      if (req.user.userType !== 'client') {
+        return res.status(403).json({
+          success: false,
+          message: 'Solo los pacientes pueden cancelar con esta acción',
+        });
+      }
+      const { appointmentId } = req.params;
+      const requesterId = String(req.user.userId || req.user._id || '');
+      if (!mongoose.Types.ObjectId.isValid(String(appointmentId))) {
+        return res.status(400).json({ success: false, message: 'ID inválido' });
+      }
+      const doc = await Appointment.findById(appointmentId);
+      if (!doc) {
+        return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+      }
+      if (!doc.clientId || String(doc.clientId) !== requesterId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Esta cita no está asociada a tu cuenta',
+        });
+      }
+      const st = String(doc.status || '');
+      if (['cancelled', 'completed', 'finished', 'rejected', 'no_show'].includes(st)) {
+        return res.status(400).json({ success: false, message: 'Esta cita no se puede cancelar' });
+      }
+      const startMs = parseAppointmentStartMs(doc.date, doc.time);
+      if (startMs == null) {
+        return res.status(400).json({ success: false, message: 'Fecha u hora del turno inválida' });
+      }
+      const now = Date.now();
+      if (startMs <= now) {
+        return res.status(400).json({ success: false, message: 'El turno ya ocurrió' });
+      }
+      if (startMs - now < CLIENT_CANCEL_MIN_HOURS_MS) {
+        return res.status(403).json({
+          success: false,
+          message:
+            'Solo podés cancelar con al menos 48 horas de anticipación respecto del horario del turno.',
+          error: 'CANCEL_TOO_LATE',
+        });
+      }
+      doc.status = 'cancelled';
+      await doc.save();
+
+      try {
+        const client = await User.findById(requesterId).select('fullName').lean();
+        const clientName = client?.fullName || 'Paciente';
+        await ExpoNotification.create({
+          recipientId: doc.professionalId,
+          senderId: requesterId,
+          type: 'appointment_cancelled_by_client',
+          title: 'Turno cancelado por el paciente',
+          message: `${clientName} canceló la cita del ${doc.date} a las ${doc.time}.`,
+          data: {
+            appointmentId: String(doc._id),
+            service: doc.service || '',
+            date: String(doc.date || ''),
+            time: String(doc.time || ''),
+            patientName: clientName,
+            professionalId: String(doc.professionalId),
+            clientId: String(doc.clientId),
+          },
+        });
+      } catch (e) {
+        console.warn('Notif cancelación paciente:', e?.message || e);
+      }
+
+      return res.json({ success: true, data: doc });
+    } catch (error) {
+      console.error('PATCH cancel-by-client:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Error' });
+    }
+  }
+);
+
+/** Reprogramación por paciente: misma ventana 48 h que cancelar. */
+app.patch(
+  '/api/v1/appointments/expo/:appointmentId/reschedule-by-client',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      if (req.user.userType !== 'client') {
+        return res.status(403).json({
+          success: false,
+          message: 'Solo los pacientes pueden reprogramar con esta acción',
+        });
+      }
+      const { appointmentId } = req.params;
+      const requesterId = String(req.user.userId || req.user._id || '');
+      if (!mongoose.Types.ObjectId.isValid(String(appointmentId))) {
+        return res.status(400).json({ success: false, message: 'ID inválido' });
+      }
+      const newDate = req.body?.newDate != null ? String(req.body.newDate).trim().slice(0, 10) : '';
+      const newTimeRaw = req.body?.newTime != null ? String(req.body.newTime).trim() : '';
+      const timeKeyMatch = newTimeRaw.match(/^(\d{1,2}):(\d{2})/);
+      const newTime = timeKeyMatch
+        ? `${String(Math.min(23, parseInt(timeKeyMatch[1], 10))).padStart(2, '0')}:${String(Math.min(59, parseInt(timeKeyMatch[2], 10))).padStart(2, '0')}`
+        : newTimeRaw;
+      if (!newDate || !newTime) {
+        return res.status(400).json({ success: false, message: 'newDate y newTime son obligatorios' });
+      }
+      const doc = await Appointment.findById(appointmentId);
+      if (!doc) {
+        return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+      }
+      if (!doc.clientId || String(doc.clientId) !== requesterId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Esta cita no está asociada a tu cuenta',
+        });
+      }
+      const st = String(doc.status || '');
+      if (['cancelled', 'completed', 'finished', 'rejected', 'no_show'].includes(st)) {
+        return res.status(400).json({ success: false, message: 'Esta cita no se puede reprogramar' });
+      }
+      const startMs = parseAppointmentStartMs(doc.date, doc.time);
+      if (startMs == null) {
+        return res.status(400).json({ success: false, message: 'Fecha u hora del turno inválida' });
+      }
+      const now = Date.now();
+      if (startMs <= now) {
+        return res.status(400).json({ success: false, message: 'El turno ya ocurrió' });
+      }
+      if (startMs - now < CLIENT_CANCEL_MIN_HOURS_MS) {
+        return res.status(403).json({
+          success: false,
+          message:
+            'Solo podés reprogramar con al menos 48 horas de anticipación respecto del horario del turno.',
+          error: 'RESCHEDULE_TOO_LATE',
+        });
+      }
+      const prevDate = doc.date;
+      const prevTime = doc.time;
+      if (String(prevDate) === newDate && String(prevTime) === newTime) {
+        return res.status(400).json({ success: false, message: 'La fecha y hora no cambiaron' });
+      }
+
+      const defaultProfDuration = await getProfessionalAppointmentDuration(doc.professionalId);
+      const newDuration = normalizeDurationMinutes(doc.duration, defaultProfDuration);
+      const newStartMin = timeToMinutes(newTime);
+      const limits = await validateProfessionalBookingLimits(
+        doc.professionalId,
+        newDate,
+        doc._id
+      );
+      if (!limits.ok) {
+        return res.status(limits.status).json({ success: false, message: limits.message });
+      }
+      if (newDate && newTime && newStartMin != null) {
+        const sameDay = await Appointment.find({
+          professionalId: doc.professionalId,
+          date: newDate,
+          status: { $nin: ['cancelled', 'rejected', 'no_show'] },
+          _id: { $ne: doc._id },
+        })
+          .select('time duration')
+          .lean();
+        const taken = sameDay.some((apt) => {
+          const aptStart = timeToMinutes(String(apt.time || ''));
+          const aptDur = normalizeDurationMinutes(apt.duration, defaultProfDuration);
+          return intervalsOverlap(newStartMin, newDuration, aptStart, aptDur);
+        });
+        if (taken) {
+          return res.status(409).json({
+            success: false,
+            message: 'Ese horario se solapa con otra cita. Elegí otro turno.',
+          });
+        }
+      }
+
+      doc.date = newDate;
+      doc.time = newTime;
+      doc.reminder24hSentAt = null;
+      // Requiere confirmación del profesional (igual que una solicitud nueva)
+      if (st !== 'pending_payment') {
+        doc.status = 'pending_approval';
+      }
+      await doc.save();
+
+      try {
+        const client = await User.findById(requesterId).select('fullName').lean();
+        const clientName = client?.fullName || 'Paciente';
+        await ExpoNotification.create({
+          recipientId: doc.professionalId,
+          senderId: requesterId,
+          // appointment_request: el profesional ve Confirmar/Rechazar en Notificaciones
+          type: 'appointment_request',
+          title: 'Solicitud de reprogramación',
+          message: `${clientName} pide mover "${doc.service || 'turno'}" del ${prevDate} ${prevTime} al ${newDate} ${newTime}. Confirmá o rechazá.`,
+          data: {
+            appointmentId: String(doc._id),
+            service: doc.service || '',
+            date: newDate,
+            time: newTime,
+            patientName: clientName,
+            notes: `Reprogramación: antes ${prevDate} ${prevTime}`,
+            professionalId: String(doc.professionalId),
+            clientId: String(doc.clientId),
+          },
+        });
+      } catch (e) {
+        console.warn('Notif reprogramación paciente:', e?.message || e);
+      }
+
+      return res.json({ success: true, data: doc });
+    } catch (error) {
+      console.error('PATCH reschedule-by-client:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Error' });
+    }
+  }
+);
+
+/** Cancelación por el profesional. */
+app.patch(
+  '/api/v1/appointments/expo/:appointmentId/cancel-by-professional',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      if (req.user.userType !== 'professional') {
+        return res.status(403).json({
+          success: false,
+          message: 'Solo los profesionales pueden cancelar con esta acción',
+        });
+      }
+      const { appointmentId } = req.params;
+      const requesterId = String(req.user.userId || req.user._id || '');
+      if (!mongoose.Types.ObjectId.isValid(String(appointmentId))) {
+        return res.status(400).json({ success: false, message: 'ID inválido' });
+      }
+      const doc = await Appointment.findById(appointmentId);
+      if (!doc) {
+        return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+      }
+      if (String(doc.professionalId) !== requesterId) {
+        return res.status(403).json({ success: false, message: 'Esta cita no es tuya' });
+      }
+      const st = String(doc.status || '');
+      if (['cancelled', 'completed', 'finished', 'rejected', 'no_show'].includes(st)) {
+        return res.status(400).json({ success: false, message: 'Esta cita no se puede cancelar' });
+      }
+      doc.status = 'cancelled';
+      await doc.save();
+
+      try {
+        const prof = await User.findById(requesterId).select('fullName').lean();
+        const profName = prof?.fullName || 'Tu profesional';
+        if (doc.clientId) {
+          await ExpoNotification.create({
+            recipientId: doc.clientId,
+            senderId: requesterId,
+            type: 'appointment_cancelled_by_professional',
+            title: 'Turno cancelado',
+            message: `${profName} canceló tu cita de "${doc.service || 'turno'}" del ${doc.date} a las ${doc.time}.`,
+            data: {
+              appointmentId: String(doc._id),
+              service: doc.service || '',
+              date: String(doc.date || ''),
+              time: String(doc.time || ''),
+              professionalName: profName,
+              professionalId: String(doc.professionalId),
+              clientId: String(doc.clientId),
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Notif cancelación profesional:', e?.message || e);
+      }
+
+      return res.json({ success: true, data: doc });
+    } catch (error) {
+      console.error('PATCH cancel-by-professional:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Error' });
+    }
+  }
+);
+
+/** Reprogramación por el profesional. */
+app.patch(
+  '/api/v1/appointments/expo/:appointmentId/reschedule-by-professional',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      if (req.user.userType !== 'professional') {
+        return res.status(403).json({
+          success: false,
+          message: 'Solo los profesionales pueden reprogramar con esta acción',
+        });
+      }
+      const { appointmentId } = req.params;
+      const requesterId = String(req.user.userId || req.user._id || '');
+      if (!mongoose.Types.ObjectId.isValid(String(appointmentId))) {
+        return res.status(400).json({ success: false, message: 'ID inválido' });
+      }
+      const newDate = req.body?.newDate != null ? String(req.body.newDate).trim().slice(0, 10) : '';
+      const newTimeRaw = req.body?.newTime != null ? String(req.body.newTime).trim() : '';
+      const timeKeyMatch = newTimeRaw.match(/^(\d{1,2}):(\d{2})/);
+      const newTime = timeKeyMatch
+        ? `${String(Math.min(23, parseInt(timeKeyMatch[1], 10))).padStart(2, '0')}:${String(Math.min(59, parseInt(timeKeyMatch[2], 10))).padStart(2, '0')}`
+        : newTimeRaw;
+      if (!newDate || !newTime) {
+        return res.status(400).json({ success: false, message: 'newDate y newTime son obligatorios' });
+      }
+      const doc = await Appointment.findById(appointmentId);
+      if (!doc) {
+        return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+      }
+      if (String(doc.professionalId) !== requesterId) {
+        return res.status(403).json({ success: false, message: 'Esta cita no es tuya' });
+      }
+      const st = String(doc.status || '');
+      if (['cancelled', 'completed', 'finished', 'rejected', 'no_show'].includes(st)) {
+        return res.status(400).json({ success: false, message: 'Esta cita no se puede reprogramar' });
+      }
+      const prevDate = doc.date;
+      const prevTime = doc.time;
+      if (String(prevDate) === newDate && String(prevTime) === newTime) {
+        return res.status(400).json({ success: false, message: 'La fecha y hora no cambiaron' });
+      }
+
+      const defaultProfDuration = await getProfessionalAppointmentDuration(doc.professionalId);
+      const newDuration = normalizeDurationMinutes(doc.duration, defaultProfDuration);
+      const newStartMin = timeToMinutes(newTime);
+      const limits = await validateProfessionalBookingLimits(
+        doc.professionalId,
+        newDate,
+        doc._id
+      );
+      if (!limits.ok) {
+        return res.status(limits.status).json({ success: false, message: limits.message });
+      }
+      if (newDate && newTime && newStartMin != null) {
+        const sameDay = await Appointment.find({
+          professionalId: doc.professionalId,
+          date: newDate,
+          status: { $nin: ['cancelled', 'rejected', 'no_show'] },
+          _id: { $ne: doc._id },
+        })
+          .select('time duration')
+          .lean();
+        const taken = sameDay.some((apt) => {
+          const aptStart = timeToMinutes(String(apt.time || ''));
+          const aptDur = normalizeDurationMinutes(apt.duration, defaultProfDuration);
+          return intervalsOverlap(newStartMin, newDuration, aptStart, aptDur);
+        });
+        if (taken) {
+          return res.status(409).json({
+            success: false,
+            message: 'Ese horario se solapa con otra cita. Elegí otro turno.',
+          });
+        }
+      }
+
+      doc.date = newDate;
+      doc.time = newTime;
+      doc.reminder24hSentAt = null;
+      await doc.save();
+
+      try {
+        const prof = await User.findById(requesterId).select('fullName').lean();
+        const profName = prof?.fullName || 'Tu profesional';
+        if (doc.clientId) {
+          await ExpoNotification.create({
+            recipientId: doc.clientId,
+            senderId: requesterId,
+            type: 'appointment_rescheduled_by_professional',
+            title: 'Turno reprogramado',
+            message: `${profName} movió tu cita de "${doc.service || 'turno'}" del ${prevDate} ${prevTime} al ${newDate} ${newTime}.`,
+            data: {
+              appointmentId: String(doc._id),
+              service: doc.service || '',
+              date: newDate,
+              time: newTime,
+              professionalName: profName,
+              professionalId: String(doc.professionalId),
+              clientId: String(doc.clientId),
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Notif reprogramación profesional:', e?.message || e);
+      }
+
+      return res.json({ success: true, data: doc });
+    } catch (error) {
+      console.error('PATCH reschedule-by-professional:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Error' });
+    }
+  }
+);
 
 app.post('/api/v1/medical-history/session', authenticateToken, async (req, res) => {
   try {
@@ -2289,7 +3050,254 @@ app.get('/api/v1/notifications', authenticateToken, async (req, res) => {
   }
 });
 
+// Notificaciones Expo (in-app + push al crear)
+app.get('/api/v1/expo-notifications', authenticateToken, async (req, res) => {
+  try {
+    const uid = req.user.userId || req.user._id;
+    const list = await ExpoNotification.find({ recipientId: uid })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    return res.json({ success: true, data: list });
+  } catch (error) {
+    console.error('GET /api/v1/expo-notifications:', error);
+    return res.status(500).json({ success: false, data: [], message: 'Error al listar notificaciones' });
+  }
+});
+
+app.patch('/api/v1/expo-notifications/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const uid = String(req.user.userId || req.user._id || '');
+    const n = await ExpoNotification.findById(req.params.id);
+    if (!n) return res.status(404).json({ success: false, message: 'Notificación no encontrada' });
+    if (String(n.recipientId) !== uid) {
+      return res.status(403).json({ success: false, message: 'No autorizado' });
+    }
+    n.read = true;
+    await n.save();
+    return res.json({ success: true, data: n });
+  } catch (error) {
+    console.error('PATCH expo-notifications read:', error);
+    return res.status(500).json({ success: false, message: 'Error al marcar como leída' });
+  }
+});
+
+app.delete('/api/v1/expo-notifications', authenticateToken, async (req, res) => {
+  try {
+    const uid = req.user.userId || req.user._id;
+    const result = await ExpoNotification.deleteMany({ recipientId: uid });
+    return res.json({ success: true, deleted: result.deletedCount || 0 });
+  } catch (error) {
+    console.error('DELETE /api/v1/expo-notifications:', error);
+    return res.status(500).json({ success: false, message: 'Error al borrar notificaciones' });
+  }
+});
+
+app.post('/api/users/push-token', authenticateToken, async (req, res) => {
+  try {
+    const raw = req.body?.expoPushToken ?? req.body?.token ?? req.body?.pushToken;
+    const token = String(raw != null ? raw : '').trim();
+    if (!token || token.length < 24 || token.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token de dispositivo inválido',
+      });
+    }
+    const userId = req.user.userId || req.user._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+    const list = Array.isArray(user.expoPushTokens) ? [...user.expoPushTokens] : [];
+    const filtered = list.filter((row) => row && String(row.token) !== token);
+    filtered.unshift({ token, updatedAt: new Date() });
+    user.expoPushTokens = filtered.slice(0, 10);
+    await user.save();
+    console.log(
+      `Push token registrado: usuario ${String(userId)} (${String(user.email || '').trim() || 'sin email'}) ${token.slice(0, 14)}…`
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('POST /api/users/push-token:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'No se pudo guardar el token',
+    });
+  }
+});
+
+app.post('/api/v1/push-debug', async (req, res) => {
+  try {
+    console.log('[push-debug]', JSON.stringify(req.body || {}).slice(0, 500));
+    return res.json({ success: true });
+  } catch {
+    return res.json({ success: true });
+  }
+});
+
+// --- Mercado Pago: señas (Checkout Pro) ---
+app.get('/api/v1/expo-payments/health', authenticateToken, async (req, res) => {
+  try {
+    const cfg = mpDepositService.getConfigurationStatus();
+    return res.json({
+      success: true,
+      data: {
+        provider: 'mercadopago',
+        dbReady: mongoose.connection.readyState === 1,
+        configured: cfg.ok,
+        missing: cfg.missing,
+        backendBaseUrl: cfg.backendBaseUrl,
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/v1/expo-payments/health:', error);
+    return res.status(500).json({ success: false, message: 'Error' });
+  }
+});
+
+app.post('/api/v1/expo-payments/create-preference', authenticateToken, async (req, res) => {
+  try {
+    if (!mpDepositService.isReady()) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Mercado Pago no está configurado. Definí MERCADOPAGO_ACCESS_TOKEN en my-app/backend/.env y reiniciá el servidor.',
+      });
+    }
+    const appointmentId = String(req.body?.appointmentId || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
+      return res.status(400).json({ success: false, message: 'appointmentId inválido' });
+    }
+    const doc = await Appointment.findById(appointmentId);
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+    }
+    const uid = String(req.user.userId || req.user._id || '');
+    if (String(doc.clientId) !== uid) {
+      return res.status(403).json({ success: false, message: 'Solo el cliente de la cita puede pagar' });
+    }
+    const amount =
+      typeof req.body?.amount === 'number' && req.body.amount > 0
+        ? req.body.amount
+        : undefined;
+    const pref = await mpDepositService.createAppointmentDepositPreference({
+      appointmentId,
+      amount,
+      description: req.body?.description,
+    });
+    return res.json({ success: true, data: pref });
+  } catch (error) {
+    console.error('POST /api/v1/expo-payments/create-preference:', error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || 'Error al crear la preferencia de pago',
+    });
+  }
+});
+
+app.get('/api/v1/expo-payments/status/:appointmentId', authenticateToken, async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(String(appointmentId))) {
+      return res.status(400).json({ success: false, message: 'ID inválido' });
+    }
+    const doc = await Appointment.findById(appointmentId)
+      .select('status paymentStatus depositAmount clientId professionalId service date time')
+      .lean();
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'No encontrada' });
+    }
+    const uid = String(req.user.userId || req.user._id || '');
+    const okClient = doc.clientId && String(doc.clientId) === uid;
+    const okProf =
+      doc.professionalId &&
+      String(doc.professionalId) === uid &&
+      req.user.userType === 'professional';
+    if (!okClient && !okProf) {
+      return res.status(403).json({ success: false, message: 'No autorizado' });
+    }
+    return res.json({
+      success: true,
+      data: {
+        status: doc.status,
+        paymentStatus: doc.paymentStatus,
+        depositAmount: doc.depositAmount,
+        service: doc.service,
+        date: doc.date,
+        time: doc.time,
+      },
+    });
+  } catch (error) {
+    console.error('GET /api/v1/expo-payments/status:', error);
+    return res.status(500).json({ success: false, message: 'Error' });
+  }
+});
+
+/** Webhook / IPN de Mercado Pago */
+app.post('/api/payments/webhook', async (req, res) => {
+  try {
+    if (!mpDepositService.isReady()) {
+      return res.status(503).json({ success: false, message: 'MP no configurado' });
+    }
+    const type = String(req.query?.type || req.body?.type || '').trim();
+    const dataId =
+      req.query?.['data.id'] ||
+      req.query?.id ||
+      req.body?.data?.id ||
+      req.body?.id ||
+      '';
+    if (type === 'payment' && dataId) {
+      await mpDepositService.processPaymentWebhookById(String(dataId));
+    } else if (dataId && !type) {
+      // Algunos IPN solo mandan id
+      await mpDepositService.processPaymentWebhookById(String(dataId));
+    }
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('POST /api/payments/webhook:', error);
+    return res.status(200).json({ received: true, error: error?.message });
+  }
+});
+
+app.get('/api/payments/webhook', async (req, res) => {
+  // Mercado Pago a veces hace GET de verificación
+  return res.status(200).send('OK');
+});
+
 // Listado público de profesionales (Reservar cita / filtros)
+const ENTRENAMIENTO_CATALOG = [
+  'Entrenamiento Personal',
+  'Entrenamiento Funcional',
+  'Entrenamiento de Fuerza',
+  'Entrenamiento Cardiovascular',
+  'Entrenamiento de Flexibilidad',
+  'Entrenamiento para Pérdida de Peso',
+  'Entrenamiento para Ganancia Muscular',
+  'Entrenamiento Deportivo',
+  'Entrenamiento para Adultos Mayores',
+  'Entrenamiento Prenatal',
+  'Entrenamiento Postnatal',
+  'Entrenamiento',
+];
+
+function expandProfessionalServices(specialty) {
+  const svc = String(specialty || '').trim();
+  if (!svc) return [];
+  const out = new Set([svc]);
+  const n = svc
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (/entren|fitness|coach|crossfit|personal.?train/.test(n)) {
+    ENTRENAMIENTO_CATALOG.forEach((s) => out.add(s));
+  }
+  if (/medic|clinic|pediatr|cardiolog|dermatolog/.test(n)) {
+    out.add('Medicina General');
+    out.add('Consulta Médica General');
+  }
+  return Array.from(out);
+}
+
 app.get('/api/v1/professionals', async (req, res) => {
   try {
     const search = String(req.query.search || '').trim();
@@ -2343,7 +3351,7 @@ app.get('/api/v1/professionals', async (req, res) => {
         id: String(u._id),
         name,
         specialty: svc || 'Profesional',
-        services: svc ? [svc] : [],
+        services: expandProfessionalServices(svc),
         offersAllCatalogServices,
         rating: 4.5,
         reviews: 0,
@@ -2403,10 +3411,30 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`📡 Health check: http://${HOST_IP}:${PORT}/api/v1/health`);
   console.log(`🔗 WebSocket: ws://${HOST_IP}:${PORT}`);
   console.warn(
-    '⚠️  Este server (my-app/backend) no incluye /api/v1/expo-payments (Mercado Pago). Para pagos MP usá: TurnarioApp/backend → npm start'
+    mpDepositService.isReady()
+      ? '💳 Mercado Pago señas: OK (/api/v1/expo-payments, /api/payments/webhook)'
+      : '⚠️  Mercado Pago señas: falta MERCADOPAGO_ACCESS_TOKEN en .env'
   );
   console.log('📋 Autorizaciones médicas: GET/POST /api/medical-authorizations');
+  console.log('🔔 Expo notifications + push: /api/v1/expo-notifications, /api/users/push-token');
+  console.log('⏰ Recordatorio 24h: job cada 15 min');
 });
+
+// Recordatorio de citas ~24h (push + in-app)
+const REMINDER_INTERVAL_MS = Math.max(
+  60_000,
+  parseInt(process.env.APPOINTMENT_REMINDER_INTERVAL_MS || String(15 * 60 * 1000), 10)
+);
+setTimeout(() => {
+  runAppointment24hReminders().catch((err) =>
+    console.warn('appointment24hReminderJob (inicial):', err?.message || err)
+  );
+}, 20_000);
+setInterval(() => {
+  runAppointment24hReminders().catch((err) =>
+    console.warn('appointment24hReminderJob:', err?.message || err)
+  );
+}, REMINDER_INTERVAL_MS);
 
 // WebSocket para notificaciones en tiempo real
 const wss = new WebSocket.Server({ server });

@@ -93,15 +93,44 @@ const appointmentSchema = new mongoose.Schema({
     required: true,
     default: 0
   },
+  /** Seña a abonar (ARS) cuando status = pending_payment */
+  depositAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'refunded'],
+    enum: [
+      'pending',
+      'paid',
+      'approved',
+      'refunded',
+      'rejected',
+      'cancelled',
+      'failure',
+      'in_process',
+      'not_required',
+    ],
     default: 'pending'
   },
   paymentId: {
     type: String,
     default: null
-  }
+  },
+  mpPaymentId: {
+    type: String,
+    default: null,
+  },
+  mpPreferenceId: {
+    type: String,
+    default: null,
+  },
+  /** Idempotencia del recordatorio ~24h al cliente */
+  reminder24hSentAt: {
+    type: Date,
+    default: null,
+  },
 }, {
   timestamps: true
 });

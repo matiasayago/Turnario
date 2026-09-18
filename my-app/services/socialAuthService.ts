@@ -115,15 +115,53 @@ export async function exchangeGoogleIdToken(
   return simpleAuthService.setSessionFromApiSuccess(body);
 }
 
+export async function checkAppleAccountExists(params: {
+  identityToken: string;
+  appleUserId?: string;
+  email?: string | null;
+}): Promise<boolean> {
+  const url = `${getBackendBaseUrl()}/api/v1/auth/apple/check`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        identityToken: params.identityToken,
+        appleUserId: params.appleUserId || undefined,
+        email: params.email || undefined,
+      }),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(formatBackendConnectionError(url, msg));
+  }
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await response.json()) as Record<string, unknown>;
+  } catch {
+    /* vacío */
+  }
+  if (!response.ok) {
+    const message =
+      (typeof body.message === 'string' && body.message.trim()) || `Error ${response.status}`;
+    throw new Error(message);
+  }
+  return body.exists === true;
+}
+
 export async function exchangeAppleSignIn(params: {
+  identityToken: string;
   appleUserId: string;
   email: string | null;
   fullName: string | null;
+  userType?: 'client' | 'professional';
 }): Promise<AuthResponse> {
   const url = `${getBackendBaseUrl()}/api/v1/auth/apple`;
   const bodyPayload: Record<string, string> = {
+    identityToken: params.identityToken,
     appleUserId: params.appleUserId,
-    userType: 'client',
+    userType: params.userType ?? 'client',
   };
   if (params.email) {
     bodyPayload.email = params.email.trim().toLowerCase();

@@ -68,7 +68,9 @@ export function useRegisterExpoPushToken(userId: string | undefined) {
         if (Platform.OS === 'android') {
           await Notifications.setNotificationChannelAsync('default', {
             name: 'Turnario',
-            importance: Notifications.AndroidImportance.DEFAULT,
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#667eea',
           });
         }
 

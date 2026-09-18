@@ -7,14 +7,17 @@ import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { isProfessionalUser } from '../../utils/userType';
 
 function TabLayoutContent() {
   const { user } = useAuth();
+  const { getUnreadCount } = useNotifications();
   if (!user) {
     return <Redirect href="/login" />;
   }
   const isProfessional = isProfessionalUser(user);
+  const unread = getUnreadCount(String(user._id || user.id || ''));
 
   return (
     <Tabs
@@ -63,6 +66,7 @@ function TabLayoutContent() {
         name="notifications"
         options={{
           title: 'Notificaciones',
+          tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined,
           tabBarIcon: ({ color }) => <Ionicons name="notifications" size={24} color={color} />,
         }}
       />

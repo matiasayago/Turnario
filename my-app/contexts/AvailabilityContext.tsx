@@ -103,7 +103,7 @@ interface AvailabilityContextType {
   isTimeSlotBlocked: (professionalId: string, date: Date, timeSlot: string) => boolean;
   isLoading: boolean;
   /** Vuelve a pedir el listado p?blico de profesionales (p. ej. tras guardar servicio en perfil). */
-  refreshProfessionalDirectory: () => Promise<void>;
+  refreshProfessionalDirectory: () => Promise<boolean | void>;
 }
 
 const AvailabilityContext = createContext<AvailabilityContextType | undefined>(undefined);
@@ -209,13 +209,19 @@ export const AvailabilityProvider: React.FC<AvailabilityProviderProps> = ({ chil
   const loadProfessionalDirectory = useCallback(async () => {
     try {
       const res = await fetch(`${getBackendBaseUrl()}/api/v1/professionals`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn('Directorio de profesionales: HTTP', res.status);
+        return false;
+      }
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         setDirectoryProfessionals(json.data);
+        return true;
       }
+      return false;
     } catch (e) {
       console.warn('Directorio de profesionales (API) no disponible:', e);
+      return false;
     }
   }, []);
 
@@ -223,10 +229,12 @@ export const AvailabilityProvider: React.FC<AvailabilityProviderProps> = ({ chil
     loadProfessionalDirectory();
   }, [loadProfessionalDirectory]);
 
+  /** Si el API respondió, no mezclar mocks demo (tapaban el vacío real / confundían el filtro). */
   const availableProfessionals = useMemo(() => {
-    const ids = new Set(directoryProfessionals.map((p) => p.id));
-    const fallback = MOCK_PROFESSIONALS.filter((p) => !ids.has(p.id));
-    return [...directoryProfessionals, ...fallback];
+    if (directoryProfessionals.length > 0) {
+      return directoryProfessionals;
+    }
+    return MOCK_PROFESSIONALS;
   }, [directoryProfessionals]);
 
   const loadAvailabilities = async () => {

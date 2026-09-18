@@ -17,7 +17,8 @@
         "buildType": "apk"
       },
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "resourceClass": "m-medium"
       },
       "env": {
         "EXPO_PUBLIC_APP_ENVIRONMENT": "preview",
@@ -28,7 +29,8 @@
         "EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE": "5491159572137",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "532311415611-0q5nf4ougi08fternou0h0o3slm7doel.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "tu_google_ios_client_id.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "532311415611-sklehmujchbfkgsj3tmjtklvnobu9tus.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "532311415611-sklehmujchbfkgsj3tmjtklvnobu9tus.apps.googleusercontent.com",
+        "APPLE_BUNDLE_ID": "com.turnariopro.app"
       }
     },
     "production": {
@@ -41,11 +43,15 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_ENVIRONMENT": "production",
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.tudominio.com",
-        "EXPO_PUBLIC_WEBSOCKET_URL": "wss://api.tudominio.com",
-        "EXPO_PUBLIC_SUPPORT_EMAIL": "matiasayago@gmail.com",
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.turnarioapp.com.ar",
+        "EXPO_PUBLIC_WEBSOCKET_URL": "wss://api.turnarioapp.com.ar",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "soporte@turnarioapp.com.ar",
         "EXPO_PUBLIC_SUPPORT_PHONE": "+5491159572137",
-        "EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE": "5491159572137"
+        "EXPO_PUBLIC_SUPPORT_WHATSAPP_PHONE": "5491159572137",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "532311415611-0q5nf4ougi08fternou0h0o3slm7doel.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "tu_google_ios_client_id.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "532311415611-sklehmujchbfkgsj3tmjtklvnobu9tus.apps.googleusercontent.com",
+        "APPLE_BUNDLE_ID": "com.turnariopro.app"
       }
     }
   },

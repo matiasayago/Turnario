@@ -39,6 +39,15 @@ import { getBookableTimeSlotsForProfessionalDate } from '../../services/bookingS
 import { simpleAuthService } from '../../services/simpleAuthService';
 import { consumeOpenManageScheduleModalRequest } from '../../utils/scheduleNavigation';
 
+/** Parsea YYYY-MM-DD como fecha local (no UTC) para evitar desfase de un día en AR. */
+function parseLocalYmd(dateInput: string): Date | null {
+  const s = String(dateInput || '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y, m, d] = s.split('-').map((n) => parseInt(n, 10));
+  const date = new Date(y, m - 1, d);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 const BACKEND_URL = getBackendBaseUrl();
 
 const CLIENT_RESERVA_TOTAL_AMOUNT = 10000;
@@ -91,7 +100,7 @@ export default function CalendarScreen() {
   } = useAppointments();
   const { shouldOpenReservaConSenaModal, closeReservaConSenaModal, openReservaConSenaModal } = useReservaConSena();
   const { openHoyBookingForm } = useNewAppointment();
-  const { availableProfessionals } = useAvailability();
+  const { availableProfessionals, refreshProfessionalDirectory } = useAvailability();
   const [refreshing, setRefreshing] = useState(false);
   const isProfessional = user?.userType === 'professional';
   
@@ -307,7 +316,7 @@ export default function CalendarScreen() {
           patientPhone: user?.phone || '',
           patientEmail: user?.email || '',
           notes: newProfessionalAppointment.notes || '',
-          status: 'pending_approval',
+          status: clientRequiresSenia ? 'pending_payment' : 'pending_approval',
           totalAmount: clientTotalForApi,
           professional: newProfessionalAppointment.professionalName,
           bookingSource: 'client',
@@ -684,7 +693,7 @@ export default function CalendarScreen() {
       'Cita reprogramada',
       isProfessional
         ? 'El turno quedó actualizado. El paciente recibirá una notificación en la app.'
-        : 'Tu turno quedó actualizado. El profesional recibirá una notificación en la app.'
+        : 'Pediste un nuevo horario. Queda pendiente hasta que el profesional lo confirme.'
     );
     closeRescheduleModal();
   };
@@ -797,6 +806,11 @@ export default function CalendarScreen() {
       list = availableProfessionals.filter((p) =>
         professionalOffersService(p, selectedService, { strict: true })
       );
+      if (list.length === 0) {
+        list = availableProfessionals.filter((p) =>
+          professionalOffersService(p, selectedService, { strict: false })
+        );
+      }
     } else if (!hasSearch && !hasClinic) {
       return [];
     }
@@ -1437,7 +1451,8 @@ export default function CalendarScreen() {
 
   // Función para formatear la fecha en español
   const formatDateInSpanish = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = parseLocalYmd(dateString) || new Date(dateString);
+    if (Number.isNaN(date.getTime())) return String(dateString || '');
     const options: Intl.DateTimeFormatOptions = {
       weekday: 'long',
       year: 'numeric',
@@ -1491,9 +1506,11 @@ export default function CalendarScreen() {
             }
             
             return upcomingAppointments.slice(0, 5).map((appointment) => {
-              const appointmentDate = new Date(appointment.date);
-              const day = appointmentDate.getDate();
-              const month = appointmentDate.toLocaleDateString('es-ES', { month: 'short' });
+              const appointmentDate = parseLocalYmd(String(appointment.date || ''));
+              const day = appointmentDate ? appointmentDate.getDate() : '';
+              const month = appointmentDate
+                ? appointmentDate.toLocaleDateString('es-ES', { month: 'short' })
+                : '';
               
               return (
                 <View key={appointment.id} style={styles.appointmentCard}>
@@ -1737,6 +1754,7 @@ export default function CalendarScreen() {
                     ]}
                     onPress={() => {
                       if (newProfessionalAppointment.service) {
+                        void refreshProfessionalDirectory();
                         setShowProfessionalSelectorModal(true);
                       } else {
                         Alert.alert('Info', 'Primero debes seleccionar un servicio');
@@ -2262,7 +2280,7 @@ export default function CalendarScreen() {
                   <Text style={styles.rescheduleHint}>
                     {isProfessional
                       ? 'Elegí nueva fecha y horario para este paciente. Se le enviará una notificación en la app.'
-                      : 'Elegí una nueva fecha (con disponibilidad del profesional) y horario. Misma política que la cancelación: al menos 48 h antes del turno actual. El profesional recibirá un aviso.'}
+                      : 'Elegí una nueva fecha (con disponibilidad del profesional) y horario. Al menos 48 h antes del turno actual. Quedará pendiente hasta que el profesional confirme.'}
                   </Text>
 
                   <Text style={styles.formLabel}>Nueva fecha</Text>

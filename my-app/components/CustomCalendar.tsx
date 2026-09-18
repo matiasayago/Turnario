@@ -26,7 +26,7 @@ export default function CustomCalendar({ onDateSelect, markedDates, selectedDate
       console.log('📅 CustomCalendar - Primeras 5 fechas:', keys.slice(0, 5));
       console.log('📅 CustomCalendar - Ejemplo:', keys[0], markedDates[keys[0]]);
     } else {
-      console.warn('⚠️ CustomCalendar - No hay fechas marcadas');
+      console.warn('⚠︝ CustomCalendar - No hay fechas marcadas');
     }
   }, [markedDates]);
 
@@ -43,7 +43,7 @@ export default function CustomCalendar({ onDateSelect, markedDates, selectedDate
     if (datesInMonth.length > 0) {
       console.log(`📆 Primeras 3 fechas:`, datesInMonth.slice(0, 3).join(', '));
     } else {
-      console.warn(`⚠️ No hay fechas disponibles en este mes`);
+      console.warn(`⚠︝ No hay fechas disponibles en este mes`);
     }
   }, [currentMonth, markedDates]);
 
@@ -85,13 +85,13 @@ export default function CustomCalendar({ onDateSelect, markedDates, selectedDate
   const goToPreviousMonth = () => {
     const newMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
     setCurrentMonth(newMonth);
-    console.log(`◀️ Mes anterior: ${newMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`);
+    console.log(`◀︝ Mes anterior: ${newMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`);
   };
 
   const goToNextMonth = () => {
     const newMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
     setCurrentMonth(newMonth);
-    console.log(`▶️ Mes siguiente: ${newMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`);
+    console.log(`▶︝ Mes siguiente: ${newMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`);
   };
 
   const formatDateString = (day: number) => {
@@ -124,7 +124,7 @@ export default function CustomCalendar({ onDateSelect, markedDates, selectedDate
     if (!day) return false;
     const today = new Date();
     const dateString = formatDateString(day);
-    const todayString = today.toISOString().split('T')[0];
+    const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     return dateString === todayString;
   };
 

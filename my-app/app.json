@@ -11,7 +11,12 @@
     "sdkVersion": "54.0.0",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.turnariopro.app"
+      "bundleIdentifier": "com.turnariopro.app",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true,
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.turnariopro.app",

@@ -95,6 +95,10 @@ Reemplazá `TU_IP_SERVIDOR` por la IP de tu VPS/hosting cuando la tengas.
 - Usá **Let's Encrypt** (Certbot en el servidor) o **Cloudflare** (proxy naranja + SSL).
 - La app Android en EAS necesita `https://api...` y `wss://api...` (ver `eas.json` perfil `production`).
 
+**Guía paso a paso (Railway + Atlas + builds):**
+
+→ **[DEPLOY_PRODUCCION.md](./DEPLOY_PRODUCCION.md)**
+
 **Ejemplo de URLs finales:**
 
 ```

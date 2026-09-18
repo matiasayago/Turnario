@@ -68,8 +68,8 @@ function PasswordResetDeepLinkBridge() {
   return null;
 }
 
-/** Abre pantalla de nueva contraseña al tocar el push de recuperación (datos desde Expo). */
-function PasswordResetPushBridge() {
+/** Abre Notificaciones (o reset) al tocar un push del dispositivo. */
+function NotificationPushBridge() {
   useEffect(() => {
     const go = (data: Record<string, unknown> | undefined) => {
       if (!data || typeof data !== 'object') return;
@@ -80,6 +80,20 @@ function PasswordResetPushBridge() {
           pathname: '/reset-password' as never,
           params: { token },
         });
+        return;
+      }
+      if (
+        type === 'appointment_request' ||
+        type === 'appointment_confirmed' ||
+        type === 'appointment_cancelled' ||
+        type === 'appointment_cancelled_by_client' ||
+        type === 'appointment_cancelled_by_professional' ||
+        type === 'appointment_rescheduled_by_client' ||
+        type === 'appointment_rescheduled_by_professional' ||
+        type === 'reminder' ||
+        type === 'payment_required'
+      ) {
+        router.push('/(tabs)/notifications' as never);
       }
     };
 
@@ -166,7 +180,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <PasswordResetDeepLinkBridge />
-      <PasswordResetPushBridge />
+      <NotificationPushBridge />
       <Providers>
         <RootLayoutContent />
       </Providers>

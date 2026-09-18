@@ -173,7 +173,7 @@ export default function DashboardScreen() {
   const { appointments, addAppointment, refreshAppointments, getUpcomingAppointments, completeAppointment, confirmAppointment, rejectAppointment } =
     useAppointments();
   const { recordProfessionalSession, loadPatientHistory } = useMedicalHistory();
-  const { isDateAvailable, availableProfessionals } = useAvailability();
+  const { isDateAvailable, availableProfessionals, refreshProfessionalDirectory } = useAvailability();
   
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -629,6 +629,7 @@ export default function DashboardScreen() {
     // Cerrar el selector de servicios
     setShowServiceSelectorModal(false);
     setServiceSearchQuery('');
+    void refreshProfessionalDirectory();
     
     // Volver al formulario de Crear Nueva Cita
     setShowModal(true);
@@ -646,6 +647,12 @@ export default function DashboardScreen() {
       filtered = availableProfessionals.filter((professional) =>
         professionalOffersService(professional, selectedService, { strict: true })
       );
+      // Si el match estricto dejó vacío (rubro vs catálogo), reintentar más flexible
+      if (filtered.length === 0) {
+        filtered = availableProfessionals.filter((professional) =>
+          professionalOffersService(professional, selectedService, { strict: false })
+        );
+      }
     } else if (!hasSearch && !hasClinic) {
       return [];
     }
@@ -997,7 +1004,11 @@ export default function DashboardScreen() {
             patientPhone: newAppointment.patientPhone,
             patientEmail: newAppointment.patientEmail,
             notes: newAppointment.notes,
-            status: isProfessional ? 'confirmed' : 'pending_approval',
+            status: isProfessional
+              ? 'confirmed'
+              : clientRequiresSenia
+                ? 'pending_payment'
+                : 'pending_approval',
             totalAmount: newAppointment.totalAmount,
             professional: newAppointment.professional,
             bookingSource: isProfessional ? 'professional' : 'client',
@@ -1798,6 +1809,7 @@ export default function DashboardScreen() {
                     ]}
                     onPress={() => {
                       if (newProfessionalAppointment.service) {
+                        void refreshProfessionalDirectory();
                         setShowProfessionalSelectorModal(true);
                       } else {
                         Alert.alert('Info', 'Primero debes seleccionar un servicio');
@@ -2257,11 +2269,18 @@ export default function DashboardScreen() {
                     }
                   </Text>
                   <Text style={styles.emptyStateSubtitle}>
-                    {newProfessionalAppointment.service 
-                      ? 'Intenta con otro servicio o contacta soporte'
-                      : 'El profesional aparecerá una vez que selecciones el servicio'
-                    }
+                    {newProfessionalAppointment.service
+                      ? availableProfessionals.length === 0
+                        ? 'No se pudo cargar el directorio. Revisá que el teléfono esté en la misma Wi‑Fi que el backend y tocá Reintentar.'
+                        : 'Probá otro servicio (ej. Entrenamiento Personal) o Reintentar'
+                      : 'El profesional aparecerá una vez que selecciones el servicio'}
                   </Text>
+                  <TouchableOpacity
+                    style={{ marginTop: 16, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#667eea', borderRadius: 8 }}
+                    onPress={() => void refreshProfessionalDirectory()}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>Reintentar carga</Text>
+                  </TouchableOpacity>
                 </View>
               )}
        </ScrollView>

@@ -282,9 +282,9 @@ export const BACKEND_CONFIG = {
     RECONNECT_DELAY: 1000,
   },
   
-  // Configuración de notificaciones push (para futuras implementaciones)
+  // Configuración de notificaciones push (Expo Push Service)
   PUSH_NOTIFICATIONS: {
-    ENABLED: false,
+    ENABLED: true,
     VAPID_PUBLIC_KEY: process.env.EXPO_PUBLIC_VAPID_KEY,
   },
   

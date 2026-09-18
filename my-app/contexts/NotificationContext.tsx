@@ -1,6 +1,7 @@
 // @ts-nocheck � beta
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, AppStateStatus } from 'react-native';
 import { getBackendBaseUrl } from '../config/backend';
 import { simpleNotificationService } from '../services/simpleNotificationService';
 import simpleAuthService from '../services/simpleAuthService';
@@ -99,6 +100,28 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (user) {
       loadNotifications();
     }
+  }, [user]);
+
+  // Refresco al volver a la app y polling liviano (push + in-app)
+  useEffect(() => {
+    if (!user) return;
+
+    const onAppState = (next: AppStateStatus) => {
+      if (next === 'active') {
+        loadNotifications();
+      }
+    };
+    const sub = AppState.addEventListener('change', onAppState);
+    const interval = setInterval(() => {
+      if (AppState.currentState === 'active') {
+        loadNotifications();
+      }
+    }, 45_000);
+
+    return () => {
+      sub.remove();
+      clearInterval(interval);
+    };
   }, [user]);
 
   // Cargar notificaciones del backend

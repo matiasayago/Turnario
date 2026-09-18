@@ -16,6 +16,22 @@ import { useAuth } from '../../contexts/AuthContext';
 import { NotificationItem, useNotifications } from '../../contexts/NotificationContext';
 import { useReservaConSena } from '../../contexts/ReservaConSenaContext';
 
+function formatAppointmentDateLocal(dateInput: string): string {
+  const s = String(dateInput || '').trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map((n) => parseInt(n, 10));
+    const date = new Date(y, m - 1, d);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+  }
+  return String(dateInput || '');
+}
+
 export default function NotificationsScreen() {
   const { user } = useAuth();
   const {
@@ -376,7 +392,9 @@ export default function NotificationsScreen() {
                 <View style={styles.detailRow}>
                   <Ionicons name="calendar" size={20} color="#667eea" />
                   <Text style={styles.detailLabel}>Fecha:</Text>
-                  <Text style={styles.detailValue}>{selectedNotification.appointmentData.date}</Text>
+                  <Text style={styles.detailValue}>
+                    {formatAppointmentDateLocal(selectedNotification.appointmentData.date)}
+                  </Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Ionicons name="time" size={20} color="#667eea" />

@@ -26,6 +26,7 @@ import { useGoogleIdTokenLogin } from '../hooks/useGoogleIdTokenLogin';
 import {
   checkGoogleAccountExists,
   decodeGoogleIdTokenPayload,
+  exchangeAppleSignIn,
   exchangeGoogleIdToken,
 } from '../services/socialAuthService';
 
@@ -286,7 +287,40 @@ export default function LoginScreen() {
       async () => {
         setIsAppleLoading(true);
         try {
-          const res = await appleAuth.signIn();
+          const cred = await appleAuth.getCredential();
+          const exists = await appleAuth.checkAppleAccountExists({
+            identityToken: cred.identityToken,
+            appleUserId: cred.appleUserId,
+            email: cred.email,
+          });
+          let userType: 'client' | 'professional' | undefined;
+          if (!exists) {
+            userType = await new Promise<'client' | 'professional'>((resolve, reject) => {
+              Alert.alert(
+                'Nueva cuenta con Apple',
+                'No hay una cuenta Turnario vinculada a tu Apple ID. Se creará una nueva.\n\n¿Vas a usar la app como cliente/paciente o como profesional?',
+                [
+                  { text: 'Cancelar', style: 'cancel', onPress: () => reject(new Error('CANCELLED')) },
+                  {
+                    text: 'Cliente',
+                    onPress: () => resolve('client'),
+                  },
+                  {
+                    text: 'Profesional',
+                    onPress: () => resolve('professional'),
+                  },
+                ],
+                { cancelable: true, onDismiss: () => reject(new Error('CANCELLED')) }
+              );
+            });
+          }
+          const res = await exchangeAppleSignIn({
+            identityToken: cred.identityToken,
+            appleUserId: cred.appleUserId,
+            email: cred.email,
+            fullName: cred.fullName,
+            userType,
+          });
           applyAuthResponse(res);
           router.replace('/(tabs)');
         } catch (error) {
@@ -296,6 +330,9 @@ export default function LoginScreen() {
             'code' in error &&
             (error as { code: string }).code === 'ERR_REQUEST_CANCELED'
           ) {
+            return;
+          }
+          if (error instanceof Error && error.message === 'CANCELLED') {
             return;
           }
           const message =
@@ -461,7 +498,7 @@ export default function LoginScreen() {
                   <Text style={styles.appleButtonText}>Conectando...</Text>
                 </>
               ) : (
-                <Text style={styles.appleButtonText}>Apple</Text>
+                <Text style={styles.appleButtonText}>Continuar con Apple</Text>
               )}
             </TouchableOpacity>
           ) : null}

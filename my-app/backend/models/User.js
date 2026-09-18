@@ -140,9 +140,20 @@ const userSchema = new mongoose.Schema({
       sms: {
         type: Boolean,
         default: false
+      },
+      appointmentReminders: {
+        type: Boolean,
+        default: true
       }
     }
   },
+  /** Tokens Expo Push del dispositivo (máx. 10) */
+  expoPushTokens: [
+    {
+      token: { type: String, trim: true },
+      updatedAt: { type: Date, default: Date.now },
+    },
+  ],
   resetPasswordToken: {
     type: String,
     default: null

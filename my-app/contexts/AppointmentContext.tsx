@@ -880,7 +880,9 @@ export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     const updatedAppointments = appointments.map((a) =>
-      String(a.id) === String(appointmentId) ? { ...a, date: d1, time: t1 } : a
+      String(a.id) === String(appointmentId)
+        ? { ...a, date: d1, time: t1, status: 'pending_approval' as const }
+        : a
     );
     setAppointments(updatedAppointments);
     saveAppointments(updatedAppointments);
